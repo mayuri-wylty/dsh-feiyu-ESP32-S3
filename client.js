@@ -37,10 +37,28 @@ window.__ModuleLoader__.load({
 			try { data = text ? JSON.parse(text) : {}; } catch {
 				throw new Error(r.status + " 非 JSON 响应：" + text.slice(0, 120));
 			}
-			if (!r.ok || data.ok === false) throw new Error(data.error
-				|| (Array.isArray(data.errors) && data.errors.length ? data.errors.join("；") : "")
-				|| ("HTTP " + r.status));   // 后端 /services 把原因放在 errors 数组，别吞成"HTTP 200"（10-25 实测坑）
+			if (!r.ok || data.ok === false) {
+				const err = new Error(data.error
+					|| (Array.isArray(data.errors) && data.errors.length ? data.errors.join("；") : "")
+					|| ("HTTP " + r.status));   // 后端 /services 把原因放在 errors 数组，别吞成"HTTP 200"（10-25 实测坑）
+				err.status = r.status;   // 429 退避要用
+				throw err;
+			}
 			return data;
+		}
+
+		// 429 限流：指数退避（1s,2s,4s,8s,16s）最多 5 次，不中止（ESP32 状态/日志轮询用）
+		const RETRY_DELAYS = [1000, 2000, 4000, 8000, 16000];
+		const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+		async function apiRetry(path, init) {
+			for (let attempt = 0; ; attempt++) {
+				try {
+					return await api(path, init);
+				} catch (e) {
+					if (!e || e.status !== 429 || attempt >= RETRY_DELAYS.length) throw e;
+					await sleep(RETRY_DELAYS[attempt]);
+				}
+			}
 		}
 
 		const PLATFORMS = [
@@ -140,6 +158,15 @@ textarea.fy-input{width:100%;min-height:136px;resize:vertical;line-height:1.65;f
 .fy-check{font-size:12px;line-height:1.8;margin-top:8px;max-height:200px;overflow:auto}
 .fy-check span.ok{color:#3fbf6f}
 .fy-check span.no{color:#c9564d}
+.fy-mono{font-family:ui-monospace,Consolas,"Courier New",monospace;font-size:12px;word-break:break-all}
+.fy-dev{display:flex;align-items:center;gap:8px;padding:6px 0;font-size:12px;
+  border-bottom:1px dashed var(--dsw-alias-border-l2,color-mix(in srgb,currentColor 10%,transparent))}
+.fy-dev b{font-weight:500}
+.fy-bubble{font-size:12px;line-height:1.6;padding:5px 9px;border-radius:8px;margin:4px 0;word-break:break-word;
+  background:var(--dsw-alias-bg-l2,color-mix(in srgb,currentColor 6%,transparent))}
+.fy-bubble b{font-weight:600;margin-right:6px;color:var(--dsw-alias-label-secondary,#8b95a5)}
+.fy-bubble.user{background:color-mix(in srgb,#3b6cf6 12%,transparent)}
+.fy-bubble.assistant{background:color-mix(in srgb,#3fbf6f 12%,transparent)}
 `;
 
 		function useStyles() {
@@ -181,6 +208,150 @@ textarea.fy-input{width:100%;min-height:136px;resize:vertical;line-height:1.65;f
 				disabled: props.disabled,
 				onClick: () => props.onChange(!props.on),
 			}, h("i"));
+		}
+
+		// ── ESP32 第五通道卡片（T24）──────────────────────────────────────────
+		// 数据源：GET /dsh-feiyu/api/esp32/status（T23 host.status()）
+		//         GET /dsh-feiyu/api/esp32/log?device=&limit=（T23 host.log()）
+		// 安全：token 只显示「已配置 / 未配置」，绝不把明文渲染进 DOM。
+		const relTime = (ts) => {
+			const n = Number(ts);
+			if (!Number.isFinite(n) || n <= 0) return "—";
+			const sec = Math.max(0, Math.round((Date.now() - n) / 1000));
+			if (sec < 5) return "刚刚";
+			if (sec < 60) return sec + " 秒前";
+			if (sec < 3600) return Math.round(sec / 60) + " 分钟前";
+			if (sec < 86400) return Math.round(sec / 3600) + " 小时前";
+			return Math.round(sec / 86400) + " 天前";
+		};
+
+		const LATENCY_FIELDS = [
+			["vadMs", "VAD"], ["asrMs", "ASR"], ["llmFirstMs", "LLM首字"],
+			["ttsFirstMs", "TTS首帧"], ["totalMs", "总耗时"],
+		];
+
+		function Esp32Card() {
+			const [st, setSt] = useState(null);
+			const [rows, setRows] = useState([]);
+			const [err, setErr] = useState("");
+			const [busy, setBusy] = useState(false);
+			const [copied, setCopied] = useState(false);
+
+			const load = useCallback(async () => {
+				setBusy(true);
+				setErr("");
+				try {
+					const s = await apiRetry("/esp32/status");
+					setSt(s);
+					const first = (s.devices || [])[0];
+					if (first && first.deviceId) {
+						const l = await apiRetry("/esp32/log?device=" + encodeURIComponent(first.deviceId) + "&limit=20");
+						setRows(Array.isArray(l.rows) ? l.rows : []);
+					} else {
+						setRows([]);
+					}
+				} catch (e) {
+					setErr(String((e && e.message) || e));
+				} finally {
+					setBusy(false);
+				}
+			}, []);
+
+			useEffect(() => { load(); }, [load]);
+
+			const copyOta = useCallback(async () => {
+				const url = (st && st.otaUrl) || "";
+				if (!url) return;
+				try {
+					if (navigator && navigator.clipboard && navigator.clipboard.writeText) {
+						await navigator.clipboard.writeText(url);
+						setCopied(true);
+						setTimeout(() => setCopied(false), 1600);
+					}
+				} catch { /* 剪贴板不可用就静默，URL 本身已可见可手抄 */ }
+			}, [st]);
+
+			const devices = (st && st.devices) || [];
+			const addr = (st && st.address) || null;
+			const port = addr && addr.port != null ? addr.port : (st && st.port);
+			const host = (st && st.publicHost) || (addr && addr.address) || "";
+			const tokenSet = !!(st && st.token);
+			const lastError = st && st.lastError;
+			// 最近一条带 latency 的日志行（T22 管线写入 meta.latency）
+			let latency = null;
+			for (let i = rows.length - 1; i >= 0; i--) {
+				const m = rows[i] && rows[i].meta;
+				if (m && m.latency && typeof m.latency === "object") { latency = m.latency; break; }
+			}
+
+			return h(Card, {
+				title: "小智 ESP32 通道",
+				extra: h("div", { className: "fy-row", style: { margin: 0 } },
+					h("button", { className: "fy-btn", onClick: load, disabled: busy }, busy ? "刷新中…" : "刷新")),
+				hint: "ESP32 语音终端（小智协议）走本机网关：设备连上后可直接对话。开关与端口在 ~/.dsh/feiyu.config.json 的 esp32 段配置（面板暂只读）。",
+			},
+				err ? h("div", { className: "fy-notice err" }, "ESP32 状态读取失败：" + err) : null,
+
+				// 未启用 / 未运行：明确提示，不留空白
+				st && !st.enabled
+					? h("div", { className: "fy-notice" }, "ESP32 通道未启用：把 feiyu.config.json 里 esp32.enabled 设为 true 后重启 DSH。")
+					: null,
+				st && st.enabled && !st.running
+					? h("div", { className: "fy-notice err" }, "ESP32 通道已启用但网关没在跑" + (lastError ? "（见下方错误）" : "：检查端口是否被占用。"))
+					: null,
+
+				// 状态行
+				h("div", { className: "fy-stats" },
+					h("div", { className: "fy-chip" + (st && st.enabled ? "" : " bad") },
+						h("span", { className: "fy-dot" + (st && st.enabled ? "" : " off") }),
+						"通道 ", h("b", null, st ? (st.enabled ? "已启用" : "未启用") : "读取中")),
+					h("div", { className: "fy-chip" + (st && st.running ? "" : " bad") },
+						h("span", { className: "fy-dot" + (st && st.running ? "" : " off") }),
+						"网关 ", h("b", null, st ? (st.running ? "运行中" : "未运行") : "读取中")),
+					h("div", { className: "fy-chip" }, "ASR ", h("b", null, st ? (st.asrAvailable ? "可用" : "不可用") : "—")),
+					h("div", { className: "fy-chip" + (tokenSet ? "" : " bad") }, "Token ", h("b", null, tokenSet ? "已配置" : "未配置")),
+					h("div", { className: "fy-chip" }, "在线设备 ", h("b", null, devices.length))),
+
+				// 端口 / OTA
+				h(Row, { label: "监听地址" },
+					h("span", { className: "fy-mono" }, host ? host + (port != null ? ":" + port : "") : "—"),
+					h("span", { className: "fy-hint", style: { marginTop: 0 } }, "设备通过这个地址连网关")),
+				h(Row, { label: "OTA URL" },
+					h("span", { className: "fy-mono" }, (st && st.otaUrl) || "—"),
+					h("button", { className: "fy-btn", onClick: copyOta, disabled: !(st && st.otaUrl) },
+						copied ? "已复制 ✓" : "复制")),
+
+				// 在线设备
+				h("div", { className: "fy-sub", style: { marginTop: 10 } }, "在线设备"),
+				h("div", { className: "fy-dev-list" },
+					devices.length
+						? devices.map((d, i) => h("div", { className: "fy-dev", key: d.sessionId || d.deviceId || i },
+							h("span", { className: "fy-dot" + (d.state && d.state !== "idle" ? "" : " off") }),
+							h("b", null, d.deviceId || "（未知设备）"),
+							h("span", { className: "fy-tag" }, d.state || "idle"),
+							h("span", { className: "fy-hint", style: { marginTop: 0 } }, "最后活动 " + relTime(d.lastSeenAt))))
+						: h("div", { className: "fy-hint", style: { marginTop: 4 } },
+							st && st.enabled ? "还没有设备连上来 —— 在设备上配好 OTA 地址后开机即可。" : "通道未启用，暂无设备。")),
+
+				// 耗时指标
+				latency ? h("div", { className: "fy-stats", style: { marginTop: 10 } },
+					LATENCY_FIELDS.filter(([k]) => latency[k] != null).map(([k, label]) =>
+						h("div", { className: "fy-chip", key: k }, label + " ", h("b", null, latency[k] + "ms")))) : null,
+
+				// 对话气泡
+				h("div", { className: "fy-sub", style: { marginTop: 10 } }, "最近对话"),
+				h("div", { className: "fy-mem" },
+					rows.length
+						? rows.slice().reverse().map((r, i) => h("div", {
+							className: "fy-bubble " + (r.role === "assistant" ? "assistant" : r.role === "user" ? "user" : ""),
+							key: i,
+						},
+							h("b", null, r.role === "assistant" ? "她" : r.role === "user" ? "用户" : (r.role || "系统")),
+							short(r.text, 200)))
+						: h("div", { className: "fy-hint", style: { marginTop: 4 } }, "还没有对话记录。")),
+
+				// 最近错误（后端已脱敏）
+				lastError ? h("div", { className: "fy-notice err", style: { marginTop: 10 } }, "最近错误：" + lastError) : null);
 		}
 
 		// ── 主面板 ────────────────────────────────────────────────────────────
@@ -553,6 +724,9 @@ textarea.fy-input{width:100%;min-height:136px;resize:vertical;line-height:1.65;f
 							h("span", { className: it.ok ? "ok" : "no" }, it.ok ? "✓ " : "✗ "),
 							it.name,
 							it.detail ? h("span", { className: "fy-tag", style: { marginLeft: 6 } }, short(it.detail, 60)) : null))) : null),
+
+				// ESP32 第五通道
+				h(Esp32Card),
 
 				// 平台开关
 				h(Card, { title: "平台开关", hint: "QQ/微信/抖音私信默认不随 DSH 自启（防止开机全家桶卡死）：开关点开才启动对应服务，DSH 退出自动复位；B站是生物钟，改完立即生效。" },

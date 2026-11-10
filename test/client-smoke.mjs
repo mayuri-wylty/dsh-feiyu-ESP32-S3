@@ -17,17 +17,44 @@ const require = createRequire(import.meta.url)
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..')
 const clientPath = path.join(root, 'client.js')
 
-// —— 极简 React：只要能建树、能跑 hooks 就行 ——
+// —— 极简 React：能建树、能跑 hooks、能展开函数组件（ESP32 卡片是子组件）——
 function createElement(type, props, ...children) {
   const flat = []
   for (const c of children.flat(Infinity)) flat.push(c)
-  return { type, props: props || {}, children: flat }
+  const merged = Object.assign({}, props || {})
+  if (flat.length) merged.children = flat.length === 1 ? flat[0] : flat
+  if (typeof type === 'function') return type(merged)
+  return { type, props: merged, children: flat }
 }
+const state = []
+const effects = []
+let hookIndex = 0
+let dirty = false
 const reactStub = {
   createElement,
-  useState: (init) => [typeof init === 'function' ? init() : init, () => {}],
-  useEffect: () => {},
-  useCallback: (fn) => fn,
+  useState(init) {
+    const i = hookIndex++
+    if (!(i in state)) state[i] = typeof init === 'function' ? init() : init
+    return [state[i], (v) => {
+      const next = typeof v === 'function' ? v(state[i]) : v
+      if (next !== state[i]) { state[i] = next; dirty = true }
+    }]
+  },
+  useEffect(fn, deps) {
+    const i = hookIndex++
+    const prev = effects[i]
+    const changed = !prev || !deps || !prev.deps || deps.some((d, k) => d !== prev.deps[k])
+    if (!changed) return
+    if (prev && typeof prev.cleanup === 'function') prev.cleanup()
+    effects[i] = { deps, cleanup: fn() }
+  },
+  useCallback(fn, deps) {
+    const i = hookIndex++
+    const prev = state[i]
+    const changed = !prev || !deps || !prev.deps || deps.some((d, k) => d !== prev.deps[k])
+    if (changed) state[i] = { deps, fn }
+    return state[i].fn
+  },
   useRef: (v) => ({ current: v }),
 }
 
@@ -43,6 +70,20 @@ globalThis.document = {
   head: { appendChild() {} },
   getElementById: () => null,
   createElement: () => ({ dataset: {}, remove() {} }),
+}
+// 假后端：只给 ESP32 状态/日志，其余 404（冒烟测试不关心）
+const ESP32_STATUS = {
+  ok: true, enabled: true, running: true,
+  address: { address: '192.168.1.20', port: 8765 }, publicHost: '192.168.1.20',
+  otaUrl: 'http://192.168.1.20:8765/xiaozhi/ota/', token: 'tok', asrAvailable: true,
+  devices: [{ deviceId: 'aa:bb:cc', sessionId: 's1', state: 'listening', lastSeenAt: Date.now() }],
+  lastError: null,
+}
+globalThis.fetch = async (url) => {
+  if (url === '/dsh-feiyu/api/config') return { ok: true, status: 200, text: async () => JSON.stringify({ ok: true, config: {}, voices: [], configPath: 'x' }) }
+  if (url === '/dsh-feiyu/api/esp32/status') return { ok: true, status: 200, text: async () => JSON.stringify(ESP32_STATUS) }
+  if (url.startsWith('/dsh-feiyu/api/esp32/log')) return { ok: true, status: 200, text: async () => JSON.stringify({ ok: true, rows: [] }) }
+  return { ok: false, status: 404, text: async () => JSON.stringify({ ok: false, error: 'no fixture: ' + url }) }
 }
 
 require(clientPath)
@@ -85,9 +126,43 @@ assert.equal(spec.label(), '大肥鱼')
 assert.equal(typeof spec.order, 'number')
 
 // —— 首次渲染（loading 态，不发请求）——
-const tree = Component({ close: () => {} })
-assert.ok(tree && tree.type === 'div', '首渲染应返回一个 div')
-assert.ok(JSON.stringify(tree).includes('读取大肥鱼配置'), '首渲染应显示读取提示')
+const firstTree = Component({ close: () => {} })
+assert.ok(firstTree && firstTree.type === 'div', '首渲染应返回一个 div')
+assert.ok(JSON.stringify(firstTree).includes('读取大肥鱼配置'), '首渲染应显示读取提示')
+
+// —— 渲染到稳定（假 fetch 只喂 ESP32 状态/日志；/config 404 → 面板停在错误态，
+//    但 ESP32 卡片是独立子组件，仍应完整渲染）——
+const flush = () => new Promise((r) => setTimeout(r, 0))
+let tree = null
+for (let pass = 0; pass < 12; pass++) {
+  hookIndex = 0
+  dirty = false
+  tree = Component({ close: () => {} })
+  await flush()
+  await flush()
+  if (!dirty) break
+}
+
+// —— ESP32 卡片（T24）：卡片存在 + 关键字段渲染出来 ——
+const collect = (node, predicate, acc = []) => {
+  if (!node || typeof node !== 'object') return acc
+  if (node.props && predicate(node)) acc.push(node)
+  for (const k of node.children || []) collect(k, predicate, acc)
+  return acc
+}
+const cards = collect(tree, (n) => n.props.className === 'fy-card')
+const esp32Card = cards.find((c) => JSON.stringify(c).includes('小智 ESP32 通道'))
+assert.ok(esp32Card, 'ESP32 卡片应渲染出来')
+const esp32Text = JSON.stringify(esp32Card)
+for (const must of ['小智 ESP32 通道', 'OTA URL', '在线设备', '最近对话', 'Token', 'ASR', '已配置']) {
+  assert.ok(esp32Text.includes(must), 'ESP32 卡片缺少关键字段：' + must)
+}
+// 设备列表容器 + 设备行
+assert.equal(collect(esp32Card, (n) => n.props.className === 'fy-dev-list').length, 1, '设备列表容器应存在')
+assert.ok(esp32Text.includes('aa:bb:cc'), '设备列表应渲染 deviceId')
+assert.ok(esp32Text.includes('http://192.168.1.20:8765/xiaozhi/ota/'), 'OTA URL 应渲染')
+// token 明文绝不出现
+assert.ok(!esp32Text.includes('"tok"') && !esp32Text.includes('>tok<'), 'ESP32 卡片不应包含 token 明文')
 
 // —— 包清单契约：dsh-client-modules 只认 exports["./client"] + dsh.client ——
 const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'))
