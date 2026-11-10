@@ -66,6 +66,12 @@
   .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
   .toast.err { background: #a13b3b; }
   .hint { color: #6b7480; font-size: 11.5px; margin-top: 6px; }
+  .mono { font-family: ui-monospace, Consolas, "Courier New", monospace; font-size: 12px; word-break: break-all; }
+  .dev { display: flex; align-items: center; gap: 8px; padding: 5px 0; font-size: 12px; border-bottom: 1px dashed #262b34; }
+  .bubble { font-size: 12px; line-height: 1.6; padding: 5px 9px; border-radius: 8px; margin: 4px 0; background: #12141a; word-break: break-word; }
+  .bubble b { color: #7f8b9b; font-weight: 600; margin-right: 6px; }
+  .bubble.user { background: #1b2740; }
+  .bubble.assistant { background: #16301f; }
 </style>
 </head>
 <body>
@@ -138,6 +144,28 @@
     <div class="mem" id="mem_list"></div>
   </div>
 
+  <div class="card">
+    <h2>小智 ESP32 通道</h2>
+    <div class="row" style="margin-top:0">
+      <button id="esp32_refresh">刷新</button>
+      <span class="hint" style="margin:0" id="esp32_state">读取中…</span>
+    </div>
+    <div class="row"><label>监听地址</label><span id="esp32_addr" class="mono">—</span></div>
+    <div class="row"><label>OTA URL</label><span id="esp32_ota" class="mono">—</span>
+      <button id="esp32_copy">复制</button></div>
+    <div class="row"><label>Token</label><span id="esp32_token">—</span>
+      <span class="hint" style="margin:0">只显示是否已配置，不显示明文</span></div>
+    <div class="row"><label>ASR</label><span id="esp32_asr">—</span></div>
+    <div class="hint" id="esp32_notice" style="display:none"></div>
+    <div class="hint" id="esp32_error" style="display:none;color:#e08a8a"></div>
+    <div class="row" style="margin-top:10px"><label>在线设备</label></div>
+    <div class="mem" id="esp32_devices"></div>
+    <div class="row" style="margin-top:10px"><label>耗时</label><span id="esp32_latency" class="hint" style="margin:0">—</span></div>
+    <div class="row" style="margin-top:10px"><label>最近对话</label></div>
+    <div class="mem" id="esp32_log"></div>
+    <div class="hint">开关与端口在 feiyu.config.json 的 esp32 段配置（本页只读）。</div>
+  </div>
+
   <div class="toast" id="toast"></div>
 
 <script>
@@ -156,7 +184,11 @@ function toast(msg, isErr) {
 async function api(path, opts) {
   const r = await fetch(API + path, Object.assign({ headers: { 'Content-Type': 'application/json' } }, opts || {}));
   const j = await r.json().catch(() => ({}));
-  if (!r.ok || j.ok === false) throw new Error(j.error || ('HTTP ' + r.status));
+  if (!r.ok || j.ok === false) {
+    const err = new Error(j.error || ('HTTP ' + r.status));
+    err.status = r.status;   // 429 退避要用
+    throw err;
+  }
   return j;
 }
 
@@ -317,6 +349,118 @@ function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
 
+// ── 小智 ESP32 通道（T24）：只读展示，token 只显示是否已配置 ──────────────
+const ESP32_RETRY = [1000, 2000, 4000, 8000, 16000];
+const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+async function apiRetry(path, opts) {
+  for (let i = 0; ; i++) {
+    try { return await api(path, opts); }
+    catch (e) {
+      if (!e || e.status !== 429 || i >= ESP32_RETRY.length) throw e;
+      await sleep(ESP32_RETRY[i]);
+    }
+  }
+}
+function relTime(ts) {
+  const n = Number(ts);
+  if (!Number.isFinite(n) || n <= 0) return '—';
+  const sec = Math.max(0, Math.round((Date.now() - n) / 1000));
+  if (sec < 5) return '刚刚';
+  if (sec < 60) return sec + ' 秒前';
+  if (sec < 3600) return Math.round(sec / 60) + ' 分钟前';
+  if (sec < 86400) return Math.round(sec / 3600) + ' 小时前';
+  return Math.round(sec / 86400) + ' 天前';
+}
+const ESP32_LATENCY = [['vadMs', 'VAD'], ['asrMs', 'ASR'], ['llmFirstMs', 'LLM首字'], ['ttsFirstMs', 'TTS首帧'], ['totalMs', '总耗时']];
+
+async function loadEsp32() {
+  const stateEl = $('esp32_state');
+  const noticeEl = $('esp32_notice');
+  const errEl = $('esp32_error');
+  noticeEl.style.display = 'none';
+  errEl.style.display = 'none';
+  try {
+    const st = await apiRetry('/esp32/status');
+    const addr = st.address || null;
+    const port = addr && addr.port != null ? addr.port : st.port;
+    const host = st.publicHost || (addr && addr.address) || '';
+    stateEl.textContent = (st.enabled ? '已启用' : '未启用') + ' · 网关' + (st.running ? '运行中' : '未运行')
+      + ' · ASR' + (st.asrAvailable ? '可用' : '不可用') + ' · 在线设备 ' + ((st.devices || []).length);
+    $('esp32_addr').textContent = host ? host + (port != null ? ':' + port : '') : '—';
+    $('esp32_ota').textContent = st.otaUrl || '—';
+    $('esp32_token').textContent = st.token ? '已配置' : '未配置';
+    $('esp32_asr').textContent = st.asrAvailable ? '可用' : '不可用';
+    if (!st.enabled) {
+      noticeEl.textContent = 'ESP32 通道未启用：把 feiyu.config.json 里 esp32.enabled 设为 true 后重启 DSH。';
+      noticeEl.style.display = '';
+    } else if (!st.running) {
+      noticeEl.textContent = 'ESP32 通道已启用但网关没在跑：检查端口是否被占用。';
+      noticeEl.style.display = '';
+    }
+    if (st.lastError) { errEl.textContent = '最近错误：' + st.lastError; errEl.style.display = ''; }
+
+    const devBox = $('esp32_devices');
+    devBox.innerHTML = '';
+    const devices = st.devices || [];
+    if (!devices.length) {
+      devBox.innerHTML = '<div class="dev">' + (st.enabled ? '还没有设备连上来 —— 在设备上配好 OTA 地址后开机即可。' : '通道未启用，暂无设备。') + '</div>';
+    } else {
+      for (const d of devices) {
+        const div = document.createElement('div');
+        div.className = 'dev';
+        div.innerHTML = '<b>' + escapeHtml(d.deviceId || '（未知设备）') + '</b>'
+          + '<span class="tag">' + escapeHtml(d.state || 'idle') + '</span>'
+          + '<span class="hint" style="margin:0">最后活动 ' + relTime(d.lastSeenAt) + '</span>';
+        devBox.appendChild(div);
+      }
+    }
+
+    const logBox = $('esp32_log');
+    logBox.innerHTML = '';
+    let latency = null;
+    const first = devices[0];
+    if (first && first.deviceId) {
+      const l = await apiRetry('/esp32/log?device=' + encodeURIComponent(first.deviceId) + '&limit=20');
+      const rows = Array.isArray(l.rows) ? l.rows : [];
+      for (let i = rows.length - 1; i >= 0; i--) {
+        const m = rows[i] && rows[i].meta;
+        if (m && m.latency && typeof m.latency === 'object') { latency = m.latency; break; }
+      }
+      if (!rows.length) logBox.innerHTML = '<div class="bubble">还没有对话记录。</div>';
+      for (const r of rows.slice().reverse()) {
+        const div = document.createElement('div');
+        div.className = 'bubble ' + (r.role === 'assistant' ? 'assistant' : r.role === 'user' ? 'user' : '');
+        const who = r.role === 'assistant' ? '她' : r.role === 'user' ? '用户' : (r.role || '系统');
+        div.innerHTML = '<b>' + escapeHtml(who) + '</b>' + escapeHtml(String(r.text || '').slice(0, 200));
+        logBox.appendChild(div);
+      }
+    } else {
+      logBox.innerHTML = '<div class="bubble">还没有对话记录。</div>';
+    }
+    $('esp32_latency').textContent = latency
+      ? ESP32_LATENCY.filter(([k]) => latency[k] != null).map(([k, label]) => label + ' ' + latency[k] + 'ms').join(' · ')
+      : '—';
+  } catch (e) {
+    stateEl.textContent = '读取失败';
+    errEl.textContent = 'ESP32 状态读取失败：' + e.message;
+    errEl.style.display = '';
+  }
+}
+
+function bindEsp32() {
+  $('esp32_refresh').addEventListener('click', loadEsp32);
+  $('esp32_copy').addEventListener('click', async () => {
+    const url = $('esp32_ota').textContent;
+    if (!url || url === '—') return;
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(url);
+        toast('OTA URL 已复制');
+      }
+    } catch { toast('复制失败，请手动选中复制', true); }
+  });
+}
+
 async function boot() {
   try {
     const j = await api('/config');
@@ -326,6 +470,8 @@ async function boot() {
     renderPlatforms();
     fillForm();
     bind();
+    bindEsp32();
+    loadEsp32();
     const p = await api('/persona').catch(() => ({ text: '' }));
     $('persona').value = p.text || '';
     loadMemory();

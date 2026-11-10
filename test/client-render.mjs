@@ -44,6 +44,26 @@ const RESPONSES = {
     dryRun: false, selftestPassed: true, ownerSet: true, configPath: 'C:/Users/x/.dsh/feiyu.config.json',
   },
   '/dsh-feiyu/api/services': { ok: true, services: { qq: { running: true, pid: 1234 }, wechat: { running: false, pid: null } } },
+  '/dsh-feiyu/api/esp32/status': {
+    ok: true, enabled: true, running: true,
+    address: { address: '192.168.1.20', family: 'IPv4', port: 8765 },
+    publicHost: '192.168.1.20',
+    otaUrl: 'http://192.168.1.20:8765/xiaozhi/ota/',
+    token: 'secret-token-xyz',
+    asrAvailable: true,
+    devices: [{
+      deviceId: 'aa:bb:cc', clientId: 'c1', sessionId: 's1', state: 'listening',
+      connectedAt: Date.now() - 60_000, lastSeenAt: Date.now() - 3_000, remoteAddress: '192.168.1.50',
+    }],
+    lastError: 'connect ECONNREFUSED 127.0.0.1:8765',
+  },
+  '/dsh-feiyu/api/esp32/log?device=aa%3Abb%3Acc&limit=20': {
+    ok: true, device: 'aa:bb:cc', limit: 20,
+    rows: [
+      { deviceId: 'aa:bb:cc', role: 'user', text: '你好小智', meta: {} },
+      { deviceId: 'aa:bb:cc', role: 'assistant', text: '我在呢', meta: { latency: { vadMs: 120, asrMs: 340, llmFirstMs: 500, ttsFirstMs: 200, totalMs: 1400 } } },
+    ],
+  },
 }
 
 // ── 极小 React ────────────────────────────────────────────────────────────
@@ -181,4 +201,40 @@ assert.equal(allSwitches.length, 31, '全页开关应为 31 个（28 + 完全自
 assert.ok(fetchCalls.includes('/dsh-feiyu/api/config'), '没有请求 /config')
 assert.ok(styleTags.length >= 1, '样式没注入')
 
-console.log('client-render ✓  渲染通过：9 个区块 · 4 个平台开关 · 请求', fetchCalls.length, '次')
+// ── ESP32 卡片（T24）：有设备 + 有 lastError 的正常态 ────────────────────────
+for (const must of ['小智 ESP32 通道', 'OTA URL', '在线设备', '最近对话', '已配置', '可用']) {
+  assert.ok(text.includes(must), 'ESP32 卡片缺少：' + must)
+}
+for (const must of ['192.168.1.20:8765', 'http://192.168.1.20:8765/xiaozhi/ota/', 'aa:bb:cc', 'listening', '你好小智', '我在呢']) {
+  assert.ok(text.includes(must), 'ESP32 卡片缺少数据：' + must)
+}
+assert.ok(text.includes('ECONNREFUSED'), 'lastError 应展示出来')
+assert.ok(text.includes('1400ms'), '耗时指标应展示 totalMs')
+assert.ok(!text.includes('secret-token-xyz'), 'token 明文绝不能渲染进 DOM')
+assert.ok(fetchCalls.some((u) => u.startsWith('/dsh-feiyu/api/esp32/log?device=')), '没有请求 esp32/log')
+
+// ── ESP32 卡片空状态：未启用 + 无设备，不能崩 ───────────────────────────────
+RESPONSES['/dsh-feiyu/api/esp32/status'] = {
+  ok: true, enabled: false, running: false, address: null, publicHost: null,
+  otaUrl: 'http://127.0.0.1:8765/xiaozhi/ota/', token: '', asrAvailable: false,
+  devices: [], lastError: null,
+}
+state.length = 0
+effects.length = 0
+fetchCalls = []
+let emptyTree = null
+for (let pass = 0; pass < 12; pass++) {
+  hookIndex = 0
+  dirty = false
+  emptyTree = Component({ close: () => {} })
+  await flush()
+  await flush()
+  if (!dirty) break
+}
+const emptyText = allText(emptyTree)
+assert.ok(!JSON.stringify(emptyTree).includes('载入失败'), '空状态不该走到错误态')
+for (const must of ['ESP32 通道未启用', '未配置', '通道未启用，暂无设备', '还没有对话记录']) {
+  assert.ok(emptyText.includes(must), 'ESP32 空状态缺少：' + must)
+}
+
+console.log('client-render ✓  渲染通过：9 个区块 · 4 个平台开关 · ESP32 卡片（正常态 + 空状态）· 请求', fetchCalls.length, '次')
