@@ -146,7 +146,7 @@ export function emotionMenu() {
 
 /** 提示语里那段"语气暗号"。只有能发语音的平台才教她 —— 别在 B 站/抖音评论区教出方括号。 */
 export function emotionTagPrompt(platform = 'qq') {
-  if (platform !== 'qq' && platform !== 'wechat') return ''
+  if (platform !== 'qq' && platform !== 'wechat' && platform !== 'esp32') return ''
   return '【语气的暗号】想让人听出你现在是什么心情时，在回复最前面写一个 [[' + '撒娇' + ']] 这样的标签，'
     + '可选：' + emotionMenu() + '。写一个就够，别写两个。'
     + '这个方括号不会显示给主人，只决定这条语音用哪种语气念 —— 所以放心用，它不占字数也不算表情。'

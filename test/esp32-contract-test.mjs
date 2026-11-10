@@ -10,7 +10,7 @@ import {
   DEFAULT_ESP32_CONFIG, mergeEsp32Config,
   FIRMWARE_EMOTIONS, EMOTION_TO_FIRMWARE, firmwareEmotionOf,
 } from '../lib/esp32/contracts.js'
-import { EMOTIONS } from '../tools/lib/emotion.mjs'
+import { EMOTIONS, emotionTagPrompt } from '../tools/lib/emotion.mjs'
 
 test('契约版本与协议常量', () => {
   assert.equal(CONTRACT_VERSION, 1)
@@ -88,6 +88,11 @@ test('每个 feiyu 情绪都映射到合法固件表情', () => {
     assert.ok(EMOTION_TO_FIRMWARE[k], `缺少 feiyu 情绪映射: ${k}`)
     assert.ok(FIRMWARE_EMOTIONS.includes(EMOTION_TO_FIRMWARE[k]), `映射目标非法: ${k} -> ${EMOTION_TO_FIRMWARE[k]}`)
   }
+})
+
+test('esp32 平台启用情绪标签提示（否则表情恒为 neutral）', () => {
+  assert.ok(emotionTagPrompt('esp32').length > 0)
+  assert.equal(emotionTagPrompt('bilibili'), '')
 })
 
 test('未知情绪回落 neutral', () => {
