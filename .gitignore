@@ -14,3 +14,6 @@ __pycache__/
 
 # 一次性脚本（别进仓库）
 tmp-*.mjs
+
+# Agent worktree（各泳道隔离工作区，不入库）
+.claude/worktrees/
