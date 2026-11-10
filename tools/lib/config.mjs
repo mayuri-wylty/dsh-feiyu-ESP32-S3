@@ -4,7 +4,10 @@
 //
 // 查找顺序：$FEIYU_CONFIG → ~/.dsh/feiyu.config.json → 内置默认值
 import fs from 'node:fs'
+import path from 'node:path'
 import { configPath } from './paths.mjs'
+// ESP32 通道的默认配置只有一份：lib/esp32/contracts.js。这里克隆它，禁止手抄第二份。
+import { DEFAULT_ESP32_CONFIG } from '../../lib/esp32/contracts.js'
 
 export { configPath } from './paths.mjs'
 
@@ -321,6 +324,10 @@ export const DEFAULTS = {
     wechatIsolated: true,           // 微信独立代理：不写、不读、不进叙事（I7）
     task: { enabled: true, pollSec: 20, maxPerTick: 1 }, // 身体/工具协议：认领队列里的活
   },
+
+  // ── 小智 ESP32 第五通道（10-30）：契约见 lib/esp32/contracts.js ─────────────
+  // 默认值直接克隆契约里的 DEFAULT_ESP32_CONFIG，避免两份默认值漂移。
+  esp32: JSON.parse(JSON.stringify(DEFAULT_ESP32_CONFIG)),
 }
 
 const merge = (base, over) => {
@@ -338,4 +345,43 @@ export function config() {
   const cfg = merge(DEFAULTS, user)
   cfg.__hasUserFile = Object.keys(user).length > 0
   return cfg
+}
+
+/** 读用户配置文件原文（不合并默认值）。空文件 = {}；坏 JSON 直接报错，避免保存时把用户配置吞掉。 */
+function readUserConfig() {
+  let raw
+  try {
+    raw = fs.readFileSync(configPath, 'utf8')
+  } catch (e) {
+    if (e.code === 'ENOENT') return {}
+    throw e
+  }
+  raw = raw.replace(/^\uFEFF/, '').trim()
+  if (!raw) return {}
+  try {
+    return JSON.parse(raw)
+  } catch (e) {
+    throw new Error(`配置文件不是合法 JSON：${configPath}（${e.message}）`)
+  }
+}
+
+/**
+ * 保存 ESP32 配置：深合并进用户配置文件（不把 DEFAULTS 抄进文件），原子写（临时文件 + rename）。
+ * @param {Record<string, unknown>} patch 允许写 esp32 之外的区段（如 llm），保持通用
+ * @returns {Record<string, unknown>} 合并默认值后的完整新配置
+ */
+export async function saveEsp32Config(patch = {}) {
+  const user = readUserConfig()
+  const next = merge(user, patch && typeof patch === 'object' ? patch : {})
+  const dir = path.dirname(configPath)
+  fs.mkdirSync(dir, { recursive: true })
+  const tmp = path.join(dir, `.${path.basename(configPath)}.${process.pid}.${Date.now()}.tmp`)
+  try {
+    fs.writeFileSync(tmp, JSON.stringify(next, null, 2) + '\n', 'utf8')
+    fs.renameSync(tmp, configPath)
+  } catch (e) {
+    try { fs.unlinkSync(tmp) } catch { /* 清理失败不掩盖原错误 */ }
+    throw e
+  }
+  return config()
 }

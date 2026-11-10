@@ -65,7 +65,7 @@ export async function chat(messages, opts = {}) {
       method: 'POST',
       headers: headersOf({ ...c, api_key: c.api_key || apiKey() }),
       body: JSON.stringify(payloadOf(c, messages, opts)),
-      signal: AbortSignal.timeout(opts.timeoutMs || 90000),
+      signal: opts.signal ?? AbortSignal.timeout(opts.timeoutMs || 90000),
     })
     if (!r.ok) throw new Error(`LLM HTTP ${r.status}: ${(await r.text()).slice(0, 200)}`)
     const j = await r.json()
@@ -94,7 +94,7 @@ export async function* chatStream(messages, opts = {}) {
     method: 'POST',
     headers: headers(),
     body: JSON.stringify(payload(messages, { ...opts, stream: true })),
-    signal: AbortSignal.timeout(120000),
+    signal: opts.signal ?? AbortSignal.timeout(120000),
   })
   if (!r.ok) throw new Error(`LLM HTTP ${r.status}`)
   const reader = r.body.getReader()
