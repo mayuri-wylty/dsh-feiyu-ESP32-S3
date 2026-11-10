@@ -18,7 +18,7 @@ import { emotionProfile, parseEmotionTag } from './emotion.mjs'
 import { scoreWavs, bestOf } from './prosody.mjs'
 import { voicedSeconds } from './video.mjs'
 
-const PASS_THROUGH = [
+export const PASS_THROUGH = [
   'ref_audio_path', 'prompt_text', 'prompt_lang', 'text_split_method', 'batch_size',
   'top_k', 'top_p', 'temperature', 'speed_factor', 'fragment_interval', 'repetition_penalty',
   'sample_steps', 'cfg_rate', 'seed',
@@ -260,6 +260,75 @@ function refPoolRaw(emotionKey, v = config().voice ?? {}, override = {}) {
   return pool.length ? pool : [base]
 }
 
+// ---------- 请求组装（synth 与 ESP32 句级 provider 共用） ----------
+
+/**
+ * 解析「要念什么、用什么情绪、用哪段参考音频」。
+ * 从 synthDetailed 抽出，行为与旧实现一致；ESP32 句级 TTS 复用同一套规则。
+ *
+ * @param {string} text 可含 [[情绪]] 标签的原始文本
+ * @param {object} [opts]
+ * @param {string} [opts.emotion] 显式情绪（优先于文本标签）
+ * @param {object} [opts.voice] 配置里的 voice 段（默认 config().voice）
+ * @param {object} [opts.override] 调用方覆盖项（emotion/candidates/temperature/ref_audio_path…）
+ * @param {object} [opts.ref] 已选定的参考段（跳过情绪库/配置选择）
+ * @param {object} [opts.profile] 已确定的情绪参数（跳过 emotionProfile）
+ * @returns {{speak:string, emotion:string, profile:object, ref:{ref_audio_path:string, prompt_text:string, from?:string}}}
+ */
+export function prepareSovits(text, opts = {}) {
+  const v = opts.voice ?? config().voice ?? {}
+  const override = opts.override ?? {}
+  const { emotion: tagged, text: bare } = parseEmotionTag(text)
+  const speak = sanitizeForTts(bare)
+  if (!speak) throw new Error('文本里全是 GBK 发不出的符号（颜文字/emoji），没有可念的内容')
+
+  const emotionKey = opts.emotion ? emotionProfile(opts.emotion).key : tagged
+  const prof = opts.profile ?? emotionProfile(emotionKey)
+  const ref = opts.ref ?? refPool(prof.key, v, override)[0]
+  return { speak, emotion: prof.key, profile: prof, ref }
+}
+
+/**
+ * 组装一次 GPT-SoVITS api_v2 /tts 请求（纯函数，不发网络）。
+ *
+ * 行为与旧 ttsOnce 内联组装完全一致：基础字段 → 配置透传（PASS_THROUGH，不覆盖已有值）
+ * → override 覆盖。ESP32 句级 provider 与 synth() 都走这里，避免两份请求体漂移。
+ *
+ * ⚠️ 采样率：api_v2 的 TTS_Request 没有“输出采样率”字段（2026-11-10 核对上游
+ *   api_v2.py 与本地 xiaozhi-server 的 gpt_sovits_v2.py）；返回 wav 的 sr 由服务端
+ *   tts_infer.yaml / 模型决定（v2 常见 32000，也可能 24000）。所以这里不请求 24k，
+ *   调用方必须读 WAV 头的 sampleRate，并按需在下一跳重采样。
+ *
+ * @param {string} text
+ * @param {object} [opts] 同 prepareSovits，另有 url / mediaType / streamingMode
+ * @returns {{url:string, body:object, text:string, emotion:string, profile:object, ref:object}}
+ */
+export function buildSovitsRequest(text, opts = {}) {
+  const v = opts.voice ?? config().voice ?? {}
+  const override = opts.override ?? {}
+  const prep = prepareSovits(text, { ...opts, voice: v, override })
+
+  const body = {
+    text: prep.speak,
+    text_lang: v.text_lang || 'zh',
+    media_type: opts.mediaType || 'wav',
+    streaming_mode: opts.streamingMode ?? false,
+    ref_audio_path: prep.ref.ref_audio_path,
+    prompt_text: prep.ref.prompt_text,
+    prompt_lang: v.prompt_lang || 'zh',
+    // cut0 = 不按标点切碎，保留跨句韵律（实测起伏 3.96 → 4.43）；长文本由 splitForTts 先分块
+    text_split_method: override.text_split_method || v.text_split_method || 'cut0',
+    temperature: Number(override.temperature ?? prep.profile.temperature),
+    speed_factor: Number(override.speed_factor ?? prep.profile.speed),
+    fragment_interval: Number(override.fragment_interval ?? prep.profile.pause),
+  }
+  for (const k of PASS_THROUGH) if (v[k] !== undefined && body[k] === undefined) body[k] = v[k]
+  for (const k of PASS_THROUGH) if (override[k] !== undefined) body[k] = override[k]
+
+  const url = opts.url || v.sovits_url || 'http://127.0.0.1:9880/tts'
+  return { url, body, text: prep.speak, emotion: prep.emotion, profile: prep.profile, ref: prep.ref }
+}
+
 // ---------- L0：分块与拼接 ----------
 
 /** 长文本分块：cut0 一次喂整段韵律最连贯，但太长容易漏字/糊，所以按句切到 ~80 字一块。 */
@@ -338,23 +407,9 @@ export function concatWav(files, out, gapSec = 0.18) {
 // ---------- 单次调用 ----------
 
 async function ttsOnce(text, outFile, { ref, prof, override, v }) {
-  const url = v.sovits_url || 'http://127.0.0.1:9880/tts'
-  const body = {
-    text,
-    text_lang: v.text_lang || 'zh',
-    media_type: 'wav',
-    streaming_mode: false,
-    ref_audio_path: ref.ref_audio_path,
-    prompt_text: ref.prompt_text,
-    prompt_lang: v.prompt_lang || 'zh',
-    // cut0 = 不按标点切碎，保留跨句韵律（实测起伏 3.96 → 4.43）；长文本由 splitForTts 先分块
-    text_split_method: override.text_split_method || v.text_split_method || 'cut0',
-    temperature: Number(override.temperature ?? prof.temperature),
-    speed_factor: Number(override.speed_factor ?? prof.speed),
-    fragment_interval: Number(override.fragment_interval ?? prof.pause),
-  }
-  for (const k of PASS_THROUGH) if (v[k] !== undefined && body[k] === undefined) body[k] = v[k]
-  for (const k of PASS_THROUGH) if (override[k] !== undefined) body[k] = override[k]
+  const { url, body } = buildSovitsRequest(text, {
+    ref, profile: prof, override, voice: v, emotion: prof.key,
+  })
 
   // 服务偶发掉连接（实测连发 40 条时会出现 fetch failed）——重试两次，别让一条候选毁掉整条消息
   let lastErr = null
@@ -397,13 +452,9 @@ export async function synth(text, outFile, override = {}) {
 /** 同 synth，但把"用了哪个情绪、挑了第几条、各候选多少分"一起返回（CLI/测试/日志用）。 */
 export async function synthDetailed(text, outFile, override = {}) {
   const v = config().voice ?? {}
-  const { emotion: tagged, text: bare } = parseEmotionTag(text)
-  const speak = sanitizeForTts(bare)
-  if (!speak) throw new Error('文本里全是 GBK 发不出的符号（颜文字/emoji），没有可念的内容')
-
-  const emotionKey = override.emotion ? emotionProfile(override.emotion).key : tagged
-  const prof = emotionProfile(emotionKey)
-  const pool = refPool(prof.key, v, override)
+  const { speak, profile: prof, ref } = prepareSovits(text, {
+    emotion: override.emotion, override, voice: v,
+  })
 
   const chunks = splitForTts(speak, Number(v.chunkChars) || 80)
   const wantBest = String(v.pick ?? 'best') !== 'first' && override.pick !== 'first'
@@ -420,8 +471,8 @@ export async function synthDetailed(text, outFile, override = {}) {
   for (const [ci, chunk] of chunks.entries()) {
     const cands = []
     for (let k = 0; k < n; k++) {
-      const ref = pool[0]                        // 一句话一个音色：候选共用同一条参考段，只换采样运气
       const f = path.join(tmpDir, `${tag}-c${ci}-${k}.wav`)
+      // 一句话一个音色：候选共用同一条参考段（prepareSovits 已选定），只换采样运气
       cands.push({ file: await ttsOnce(chunk, f, { ref, prof, override, v }), refFrom: ref.from })
     }
     made.push({ chunk, cands })
@@ -436,7 +487,7 @@ export async function synthDetailed(text, outFile, override = {}) {
 const fidelity = override.fidelity !== undefined ? !!override.fidelity : config().voice?.fidelity !== false
   const all = made.flatMap((m) => m.cands.map((c) => ({
     path: c.file, chars: m.chunk.length, rateMin: prof.rateMin, rateMax: prof.rateMax,
-    ref: override.registerRef ? pool[0]?.ref_audio_path : undefined,
+    ref: override.registerRef ? ref.ref_audio_path : undefined,
     fidelity,
   })))
   const scores = all.length > 1 ? scoreWavs(all) : [{ path: all[0].path, ok: true, score: 0 }]
