@@ -6,7 +6,7 @@ import {
   CONTRACT_VERSION, PROTOCOL_VERSION, OTA_PATH, WS_PATH, DEFAULT_PORT,
   DEVICE_MESSAGE_TYPES, SERVER_MESSAGE_TYPES, TTS_STATES, LISTEN_STATES, LISTEN_MODES,
   SESSION_STATES, isSessionState, AUDIO, BRAIN_EVENT_TYPES,
-  ASR_PROVIDER_IDS, TTS_PROVIDER_IDS,
+  ASR_PROVIDER_IDS, TTS_PROVIDER_IDS, TTS_WRAPPER_PROVIDER_IDS,
   DEFAULT_ESP32_CONFIG, mergeEsp32Config,
   FIRMWARE_EMOTIONS, EMOTION_TO_FIRMWARE, firmwareEmotionOf,
 } from '../lib/esp32/contracts.js'
@@ -51,6 +51,14 @@ test('provider id 集合非空且唯一', () => {
   assert.ok(TTS_PROVIDER_IDS.includes('sovits-sentence'))
   assert.ok(TTS_PROVIDER_IDS.includes('sovits-stream'))
   assert.ok(TTS_PROVIDER_IDS.includes('cloud'))
+})
+
+test('包装型 provider id 与可配置后端不相交', () => {
+  assert.ok(TTS_WRAPPER_PROVIDER_IDS.includes('fallback'))
+  assert.equal(new Set(TTS_WRAPPER_PROVIDER_IDS).size, TTS_WRAPPER_PROVIDER_IDS.length)
+  for (const id of TTS_WRAPPER_PROVIDER_IDS) {
+    assert.ok(!TTS_PROVIDER_IDS.includes(id), `${id} 不应同时是可配置的后端 id`)
+  }
 })
 
 test('默认 esp32 配置形状', () => {
