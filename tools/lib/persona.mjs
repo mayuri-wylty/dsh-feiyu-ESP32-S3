@@ -104,10 +104,12 @@ export const PLATFORM_HINTS = {
   'douyin-dm': `抖音私信，只跟主人一个人聊。像 QQ 私聊那样自然：短句、可以撒娇、
 可以提今天刷到的好玩的；一条就一两句，最多三条，别刷屏，别写成小作文。`,
   bilibili: '动态/评论区，允许一点点碎碎念。',
+  // 小智 ESP32 语音终端：回复会被直接念出来，长度和格式都要为耳朵服务。
+  esp32: `这是语音对话：你说的话会被直接念出来，所以要口语化、简短，一次 1–3 句；不要表情符号/颜文字，不要链接，不要 markdown。像面对面聊天，接住对方的话就够，别列点、别总结。`,
 }
 
 /** 每个平台愿意塞多少条原文对话（QQ/抖音私信 有滚动记忆兜底，所以敢多带）。 */
-export const RECENT_N = { qq: 24, wechat: 12, 'douyin-dm': 24, bilibili: 8, douyin: 8 }
+export const RECENT_N = { qq: 24, wechat: 12, 'douyin-dm': 24, bilibili: 8, douyin: 8, esp32: 16 }
 
 /** 对方是不是主人 —— 决定她用"黏主人"还是"对网友"的语气，也是隐私红线。
  *  isGroup：群聊里对面是群友不是私聊网友，语气按朋友闲聊装配（用户 10-25 拍板：群里像私聊一样回）。 */
@@ -324,7 +326,11 @@ export function buildMessages({ platform = 'qq', userText, chatId, userId, turns
 
   // 状态层（平台提示 + 情绪 + 时段）
   const hintKey = isGroup ? `${platform}-group` : platform
-  const hint = PLATFORM_HINTS[hintKey] || PLATFORM_HINTS[platform] || ''
+  // ESP32 允许用配置覆盖平台提示（config esp32.personaHint；空串 = 用默认提示）
+  const customHint = platform === 'esp32' && !isGroup && typeof cfg.esp32?.personaHint === 'string'
+    ? cfg.esp32.personaHint.trim()
+    : ''
+  const hint = customHint || PLATFORM_HINTS[hintKey] || PLATFORM_HINTS[platform] || ''
   parts.push(mood.stateBlock(turnsToday, platform, isGroup) + (hint ? '\n' + hint : ''))
 
   // 账本层（10-26）：她的记忆里反复问"账本/饭钱"，因为她读不到账 —— 于是只能问主人。
