@@ -454,6 +454,19 @@ test('createTtsProviderFromConfig：按配置创建 cloud', () => {
   assert.equal(provider.id, 'cloud')
 })
 
+test('createTtsProviderFromConfig：按配置创建 sovits-stream（T18 注册）', () => {
+  writeConfig({ esp32: { tts: { provider: 'sovits-stream', fallback: '' } } })
+  const provider = createTtsProviderFromConfig()
+  assert.equal(provider.id, 'sovits-stream')
+  assert.equal(typeof provider.stream, 'function')
+})
+
+test('createTtsProviderFromConfig：sovits-stream 可作为 fallback 被接受', () => {
+  writeConfig({ esp32: { tts: { provider: 'cloud', fallback: 'sovits-stream', cloud: { baseUrl: 'http://tts.local/v1' } } } })
+  const provider = createTtsProviderFromConfig()
+  assert.equal(provider.id, FALLBACK_PROVIDER_ID) // 主备不同 → 包一层 fallback
+})
+
 test('createTtsProviderFromConfig：未知 id 抛清晰错误（主/备都一样）', () => {
   writeConfig({ esp32: { tts: { provider: 'no-such-tts', fallback: '' } } })
   assert.throws(() => createTtsProviderFromConfig(), /未知的 TTS provider/)
