@@ -1,0 +1,76 @@
+{
+  "version": 1,
+  "generatedBy": "test/esp32-sim/gen-fixtures.ps1",
+  "voice": "Microsoft Huihui Desktop",
+  "format": {
+    "sampleRate": 16000,
+    "channels": 1,
+    "bitsPerSample": 16,
+    "encoding": "pcm_s16le"
+  },
+  "fixtures": [
+    {
+      "file": "wake-dafeiyu.wav",
+      "text": "大肥鱼",
+      "durationMs": 1665,
+      "sampleRate": 16000,
+      "channels": 1,
+      "bitsPerSample": 16,
+      "purpose": "唤醒/问候词（hello→listen→stt 基线）"
+    },
+    {
+      "file": "qa-weather.wav",
+      "text": "今天天气怎么样",
+      "durationMs": 2455,
+      "sampleRate": 16000,
+      "channels": 1,
+      "bitsPerSample": 16,
+      "purpose": "日常问答：天气（T14 模拟设备 STT 断言）"
+    },
+    {
+      "file": "qa-joke.wav",
+      "text": "给我讲个笑话",
+      "durationMs": 2235,
+      "sampleRate": 16000,
+      "channels": 1,
+      "bitsPerSample": 16,
+      "purpose": "日常问答：讲笑话（T22 E2E 输入）"
+    },
+    {
+      "file": "long-sentence.wav",
+      "text": "今天天气真不错我们一起去公园散步吧",
+      "durationMs": 5010,
+      "sampleRate": 16000,
+      "channels": 1,
+      "bitsPerSample": 16,
+      "purpose": "长句 ≥15 字（句切分/TTS 分块/T21 长句转写）"
+    },
+    {
+      "file": "emotion-happy.wav",
+      "text": "太棒了我太开心了",
+      "durationMs": 1897,
+      "sampleRate": 16000,
+      "channels": 1,
+      "bitsPerSample": 16,
+      "purpose": "带情绪短句（高兴，SSML 快语速/高音调）"
+    },
+    {
+      "file": "silence.wav",
+      "text": "",
+      "durationMs": 2000,
+      "sampleRate": 16000,
+      "channels": 1,
+      "bitsPerSample": 16,
+      "purpose": "≥2s 数字静音（VAD 负样本/打断基线）"
+    },
+    {
+      "file": "noise.wav",
+      "text": "",
+      "durationMs": 2000,
+      "sampleRate": 16000,
+      "channels": 1,
+      "bitsPerSample": 16,
+      "purpose": "≥2s 低幅白噪声（VAD 噪声底，幅度 ±300）"
+    }
+  ]
+}
