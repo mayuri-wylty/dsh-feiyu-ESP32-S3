@@ -1,0 +1,17 @@
+{
+  "name": "dsh-spike-b-speech-probe",
+  "version": "0.0.1-spike",
+  "private": true,
+  "description": "T03 Spike B: host-side ctx.speechToText + sherpa-onnx-node probe (temporary).",
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./package.json": "./package.json"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  }
+}

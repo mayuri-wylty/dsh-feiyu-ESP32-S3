@@ -1,0 +1,17 @@
+{
+  "name": "dsh-spike-a-gateway-probe",
+  "version": "0.0.1-spike",
+  "private": true,
+  "description": "T02a Spike A: host-side 0.0.0.0:8765 HTTP/WS listener + publicHost NIC selection probe (temporary).",
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./package.json": "./package.json"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  }
+}
