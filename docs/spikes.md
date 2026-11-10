@@ -10,7 +10,7 @@
 | 编号 | Spike | 结论 | 对 T12 / G0 的影响 |
 | --- | --- | --- | --- |
 | T02a | 宿主内 HTTP + WebSocket 监听（`0.0.0.0:8765`） | **PASS** | 插件可在 DSH 宿主进程内直接 listen，T12 网关可以走宿主内实现；`publicHost` 必须按本文规则排除虚拟/VPN 网卡，否则会选到 Mihomo 的 `198.18.0.1` |
-| T03 | 宿主内 `ctx.speechToText` + `sherpa-onnx-node` | **待执行** | 按 T03 结果决定：A 失败 → 网关子进程；B 失败 → 通道内直载 SenseVoice |
+| T03 | 宿主内 `ctx.speechToText` + `sherpa-onnx-node` | **PASS**（服务调用）/ `sherpa-onnx-node` 直接 import **FAIL** | ASR 优先复用 `ctx.speechToText`（voice-input bundle 的 SenseVoice，模型已在缓存）；不需要为 ASR 拆网关子进程。feiyu 插件内直接 `import('sherpa-onnx-node')` 不可用，直载需自行加依赖并在 Node worker（`ELECTRON_RUN_AS_NODE=1`）中运行 |
 
 ## 环境基线
 
@@ -200,4 +200,139 @@ node scripts-esp32/spike-a-client.mjs --port 8765 127.0.0.1 192.168.10.39
 
 ## T03 Spike B —— 宿主内 `speechToText` 与 `sherpa-onnx-node`
 
-> 状态：待执行。完成后在本文件追加 B0–B5 与对 G0 的结论。
+### B0. 方法与临时插件
+
+临时插件包：`scripts-esp32/spike-b-plugin/`（包名 `dsh-spike-b-speech-probe`）。
+
+- `package.json` 声明 `dsh.bundle.patch = ./cordis.patch.yml`，patch 插入同名插件。
+- `lib/index.js` 在 `apply(ctx)` 中用 `setTimeout`（默认 8 秒，**不在任何协议请求里**）触发探测：
+  1. `ctx.speechToText.snapshot()` 读取 provider 状态；
+  2. `ctx.speechToText.resolve({ audio, language: 'zh' })`；
+  3. `ctx.speechToText.transcribe(spec, AbortSignal.timeout(180000))`；
+  4. `import('sherpa-onnx-node')` + `import.meta.resolve`；
+  5. 额外从 DSH app.asar 的 SenseVoice provider 锚点 `createRequire(...)('sherpa-onnx-node')`，并尝试 `readWave`。
+- 结果写入 `%TEMP%\dsh-spike-b-result.json`，日志写入 `%TEMP%\dsh-spike-b.log`。
+- 测试音频：Windows SAPI 音色 `Microsoft Huihui Desktop` 生成
+  `小智小智，今天天气怎么样？请帮我打开客厅的灯。`
+  SAPI 原始文件 fmt 块为 18 字节，DSH `validateWave` 要求 44 字节 canonical 头；
+  用 `scripts-esp32/spike-b-fixtures/normalize-wav.mjs` 重整为 16 kHz mono PCM16：
+  ```json
+  { "bytes": 209164, "seconds": 6.535, "canonical": true }
+  ```
+- 安装/卸载方式与 Spike A 相同：停止 DSH 后在 desktop profile 用 `pnpm add link:...` 安装，
+  把 `dsh-spike-b-speech-probe` 追加到 `dsh.profile.bundles`；测试结束后恢复 profile（见 B5）。
+
+### B1. `ctx.speechToText` 与所需服务：PASS
+
+voice-input bundle 已在 desktop profile 启用，插件内 `ctx.speechToText` 可用，无需额外安装：
+
+- profile `cordis.patch.yml` 中 `speech-to-text` 的 `defaultProvider: sensevoice-local`、`language: zh`；
+- `speech-to-text-sensevoice` 的 `dataRoot` 指向 `C:\Users\20323\.dsh\speech-to-text\sensevoice`；
+- 探测前 provider 快照为 `sensevoice-local` / `preparation.phase = "standby"`，
+  说明模型缓存已就绪（T01 已确认 `model.int8.onnx` 等文件存在），**不需要下载，也没有触发 prepare**。
+
+结论：T03 所需服务完全由 voice-input bundle 提供，feiyu 通道只需 `inject: ['speechToText']`。
+
+### B2. `resolve` / `transcribe` 调用：PASS
+
+从插件定时器回调内调用，完整结果（`%TEMP%\dsh-spike-b-result.json`）：
+
+| 阶段 | 结果 | 耗时 |
+| --- | --- | --- |
+| `snapshot` | provider `sensevoice-local`，phase `standby` | — |
+| `resolve` | 成功，provider `sensevoice-local`，language `zh`，audio 209164 字节 | **0.245 ms** |
+| `transcribe` | 成功 | **2913.3 ms**（`audioSeconds=6.535`，`inferenceSeconds=0.2901`） |
+
+返回文本（与生成文本一致）：
+
+```text
+小智小智，今天天气怎么样？ 请帮我打开客厅的灯。
+```
+
+说明：
+
+- 首次 `transcribe` 的 2.9 s 包含唤醒/队列等待；服务自报推理时间仅 **0.29 s**，模型本身很快。
+- 调用发生在插件启动后的定时器中，不依赖 Web 请求/WS 会话，符合“通道内后台调用 ASR”的场景。
+- 进程树确认调用由 DSH 托管的 SenseVoice worker 执行：
+  `宿主 PID 15136 → dsh-subprocess-local/lib/runner.js PID 2352 → sensevoice/lib/worker.js PID 17820`；
+  worker 配置含 `dataRoot=C:\Users\20323\.dsh\speech-to-text\sensevoice`、`precision=int8`，
+  命令行中**没有 token**。
+
+### B3. feiyu 插件环境直接 `import('sherpa-onnx-node')`：FAIL
+
+`import.meta.resolve` 与 `import()` 均失败：
+
+```json
+{
+  "ok": false,
+  "error": {
+    "name": "Error",
+    "code": "ERR_MODULE_NOT_FOUND",
+    "message": "Cannot find package 'sherpa-onnx-node' imported from D:\\AI_Code\\小智机器人\\dsh-feiyu\\.claude\\worktrees\\agent-af703fe15683e50ad\\scripts-esp32\\spike-b-plugin\\lib\\index.js"
+  }
+}
+```
+
+原因：`sherpa-onnx-node` 只存在于 DSH 的 `app.asar\dsh\node_modules` 依赖树中，
+不是 dsh-feiyu 的依赖，通过 feiyu 插件的正常模块解析不可见。
+因此“在通道内直接 `import` SenseVoice”不能零配置实现；若要走这条路，必须把
+`sherpa-onnx-node` 加为 feiyu 的依赖，并自行管理模型路径/worker 生命周期。
+
+### B4. 额外验证：宿主内锚点 require 与 Electron 限制
+
+从 DSH app.asar 的 provider 包锚点可以加载原生模块：
+
+```text
+anchor:  D:\DSH桌面版\resources\app.asar\dsh\node_modules\@deepseek-ai\dsh-experimental-speech-to-text-sensevoice\package.json
+resolved: ...\dsh\node_modules\sherpa-onnx-node\sherpa-onnx.js
+version: 1.13.8
+onnxruntimeVersion: 1.28.2
+gitSha1: 11afbd00
+```
+
+但 `readWave(wavPath)` 在宿主（Electron 进程）内失败：
+
+```text
+Error: External buffers are not allowed
+```
+
+这是 Electron 对宿主 Node 外部 buffer 的限制，不是模块加载失败。DSH 自己不受影响：
+它把 ASR 放进 `ELECTRON_RUN_AS_NODE=1` 的 worker，且 worker 不调用 `readWave`，
+而是直接从 WAV 字节的 offset 44 解析 PCM（`worker.js` 中
+`new DataView(audio.buffer, audio.byteOffset + 44, ...)`）。
+
+结论：**不要在 Electron 宿主里直接跑 sherpa-onnx 的音频读取/推理**；如确需直载，
+应放进 Node worker 或子进程（`ELECTRON_RUN_AS_NODE=1`），否则会踩外部 buffer 限制。
+本次 Spike 的服务调用路径已由 DSH 的托管 worker 验证可用，无需自己处理该限制。
+
+### B5. 卸载清理与对 G0 的影响
+
+清理步骤与结果：
+
+1. 停止全部 DSH 进程（含宿主与 worker）；
+2. 从 profile `package.json` 的 `dsh.profile.bundles` 移除 `dsh-spike-b-speech-probe`，删除 link 依赖；
+3. `pnpm remove dsh-spike-b-speech-probe` 后仍残留 junction，
+   已手动删除 `node_modules\dsh-spike-b-speech-probe`；
+4. `package.json` / `pnpm-lock.yaml` 的 SHA-256 与测试前备份完全一致
+   （`00D247EA…FFE0` / `3399316B…59B5`），profile 内无 `spike-b` 残留；
+5. `start-dsh.ps1` 重启成功：新宿主 PID=`25376`，端口 `58753`；
+   `%TEMP%\dsh-spike-b.log` 的最后写入时间仍为测试时的 `16:23:22`，
+   新宿主启动于 `16:26:39`，**证明临时插件未被加载**；
+6. 8765 无监听；`probe.ps1` 结果 `PASS=5 FAIL=0 BLOCKED=2 WARN=0 SKIP=0`（退出码 2），
+   dsh-feiyu 路由/安装/链接/运行标记全部 PASS，仅 GPT-SoVITS 仍 BLOCKED（与 T01 基线一致）。
+
+对 G0（通道内 ASR 方案）的影响：
+
+- **ASR 走 `ctx.speechToText` 可行且推荐**：voice-input bundle 已提供 SenseVoice，
+  模型缓存已就绪，插件启动后即可后台调用，耗时满足交互（推理 0.29 s / 首调 2.9 s）。
+- **不需要为 ASR 拆网关子进程**：Spike A 已证明宿主内可监听 8765，Spike B 证明宿主内可调用
+  `speechToText`。G0 可以保持“单宿主插件 + 复用 voice-input 服务”的架构；
+  仅当需要崩溃隔离/独立原生依赖/独立升级时再考虑子进程。
+- **不建议通道内直载 SenseVoice 作为首选**：`import('sherpa-onnx-node')` 当前不可用；
+  即使补依赖，也必须放进 `ELECTRON_RUN_AS_NODE=1` 的 worker/子进程，避免
+  `External buffers are not allowed`。这会重复 DSH 已做好的 worker 管理。
+- **前置条件**：T12 需确认 voice-input bundle 处于启用状态（`speech-to-text` +
+  `sensevoice-local`）；若用户禁用该 bundle，通道应给出明确错误/降级提示，
+  而不是假设模型一定可用。
+- **安全**：本次未读取/打印 DSH token；ASR 调用全部在本机进程内完成，未访问外部网络。
+
