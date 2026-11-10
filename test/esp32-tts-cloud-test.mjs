@@ -426,7 +426,7 @@ test('fallback：空白文本不调用任何 provider', async () => {
   assert.equal(fallback.calls, 0)
 })
 
-test('fallback：provider 的 id 用真实 id，不伪造 fallback', async () => {
+test('fallback：onFallback 的 from/to 使用真实 provider id（外层 id 为 fallback）', async () => {
   const primary = fakeProvider('sovits-sentence', { error: new Error('boom') })
   const fallback = fakeProvider('cloud', { chunks: [chunk(5)] })
   const notices = []
@@ -480,6 +480,81 @@ test('createTtsProviderFromConfig：primary + 不同 fallback → 包装为 fall
   })
   assert.equal(provider.id, 'fallback')
   assert.equal(typeof provider.stream, 'function')
+})
+
+test('createTtsProviderFromConfig：fallback 懒构造，cloud baseUrl 为空不影响 primary 成功', async () => {
+  writeConfig({ esp32: { tts: { provider: 'sovits-sentence', fallback: 'cloud', cloud: { baseUrl: '' } } } })
+  let cloudCalls = 0
+  const provider = createTtsProviderFromConfig({
+    sovits: {
+      url: 'http://sovits.local/tts',
+      queue: createTtsQueue(),
+      ref: REF,
+      voice: {},
+      fetch: async () => httpResponse(makeWav({ frames: 1200 })),
+    },
+    cloud: {
+      fetch: async () => {
+        cloudCalls += 1
+        throw new Error('懒构造的 fallback 不该被创建/请求')
+      },
+    },
+  })
+  assert.equal(provider.id, 'fallback') // 包装层照旧
+  const chunks = await collect(provider.stream('你好'))
+  assert.equal(chunks.length, 1)
+  assert.deepEqual([...chunks[0].pcm.slice(0, 1)], [0])
+  assert.equal(cloudCalls, 0) // 主成功：云端连 fetch 都没碰过
+})
+
+test('createTtsProviderFromConfig：primary 失败才构建 fallback，配置错误按 fallback 失败聚合', async () => {
+  writeConfig({ esp32: { tts: { provider: 'sovits-sentence', fallback: 'cloud', cloud: { baseUrl: '' } } } })
+  const provider = createTtsProviderFromConfig({
+    sovits: {
+      url: 'http://sovits.local/tts',
+      queue: createTtsQueue(),
+      ref: REF,
+      voice: {},
+      fetch: async () => httpResponse('primary down', { status: 500, contentType: 'text/plain' }),
+    },
+    cloud: { baseUrl: '' }, // fallback 的配置错误，只在真正回退时暴露
+  })
+  assert.equal(provider.id, 'fallback')
+
+  await assert.rejects(collect(provider.stream('你好')), (e) => {
+    assert.ok(e instanceof AggregateError)
+    assert.match(e.message, /primary:.*HTTP 500/)
+    assert.match(e.message, /fallback:.*baseUrl/)
+    assert.match(e.fallbackError.message, /baseUrl/)
+    return true
+  })
+})
+
+test('createTtsProviderFromConfig：懒 fallback 的 id 仍为配置的真实 id', async () => {
+  writeConfig({ esp32: { tts: { provider: 'cloud', fallback: 'sovits-sentence' } } })
+  const notices = []
+  const provider = createTtsProviderFromConfig({
+    provider: 'cloud',
+    fallback: 'sovits-sentence',
+    cloud: {
+      baseUrl: 'http://tts.local',
+      fetch: async () => httpResponse('primary down', { status: 500, contentType: 'text/plain' }),
+    },
+    sovits: {
+      url: 'http://sovits.local/tts',
+      queue: createTtsQueue(),
+      ref: REF,
+      voice: {},
+      fetch: async () => httpResponse(makeWav({ frames: 1200 })),
+    },
+    onFallback: (info) => notices.push(info),
+  })
+
+  const chunks = await collect(provider.stream('你好'))
+  assert.equal(chunks.length, 1)
+  assert.equal(notices.length, 1)
+  assert.equal(notices[0].from, 'cloud')
+  assert.equal(notices[0].to, 'sovits-sentence') // 懒包装 id 没被写成 'fallback'
 })
 
 test('createTtsProviderFromConfig：options 覆盖配置文件里的 provider', () => {
