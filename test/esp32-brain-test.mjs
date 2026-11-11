@@ -163,25 +163,30 @@ test('persona：esp32 平台提示与 RECENT_N，且支持 config 覆盖', async
   assert.doesNotMatch(custom[0].content, /语音对话：口语化/)
 })
 
-// ── llm：外部 signal 透传 ────────────────────────────────────────────────────
-test('llm.chat / chatStream 透传外部 signal；不传时用默认 AbortSignal', async () => {
+// ── llm：外部 signal 与超时合并 ──────────────────────────────────────────────
+test('llm.chat / chatStream：外部 signal 与超时同时生效', async () => {
   const originalFetch = globalThis.fetch
   const seen = []
   try {
-    // chat：外部 signal
+    // chat：外部 signal 必须能中止请求（不是被默认超时 signal 顶掉）
     globalThis.fetch = async (url, init) => {
       seen.push(init.signal)
       return { ok: true, json: async () => ({ choices: [{ message: { content: '好' } }] }) }
     }
     const ac = new AbortController()
     assert.equal(await llm.chat([{ role: 'user', content: 'hi' }], { signal: ac.signal }), '好')
-    assert.equal(seen.at(-1), ac.signal)
+    const chatSignal = seen.at(-1)
+    assert.ok(chatSignal instanceof AbortSignal)
+    assert.equal(chatSignal.aborted, false)
+    ac.abort()
+    assert.equal(chatSignal.aborted, true, '外部 signal 中止后请求 signal 必须跟着中止')
+
+    // 不传外部 signal：仍然有超时兜底
     assert.equal(await llm.chat([{ role: 'user', content: 'hi' }]), '好')
     assert.ok(seen.at(-1) instanceof AbortSignal)
-    assert.notEqual(seen.at(-1), ac.signal)
     assert.equal(seen.at(-1).aborted, false)
 
-    // chatStream：外部 signal + 正常解析
+    // chatStream：同样合并
     const enc = new TextEncoder()
     globalThis.fetch = async (url, init) => {
       seen.push(init.signal)
@@ -202,14 +207,15 @@ test('llm.chat / chatStream 透传外部 signal；不传时用默认 AbortSignal
         },
       }
     }
-    const chunks = await collect(llm.chatStream([{ role: 'user', content: 'hi' }], { signal: ac.signal }))
+    const ac2 = new AbortController()
+    const chunks = await collect(llm.chatStream([{ role: 'user', content: 'hi' }], { signal: ac2.signal }))
     assert.equal(chunks.join(''), '嗨')
-    assert.equal(seen.at(-1), ac.signal)
-    await collect(llm.chatStream([{ role: 'user', content: 'hi' }]))
-    assert.ok(seen.at(-1) instanceof AbortSignal)
-    assert.notEqual(seen.at(-1), ac.signal)
+    const streamSignal = seen.at(-1)
+    assert.equal(streamSignal.aborted, false)
+    ac2.abort()
+    assert.equal(streamSignal.aborted, true, 'chatStream 的外部 signal 也必须生效')
 
-    // 已中止的外部 signal：请求必须真的中止（不是被默认超时 signal 顶掉）
+    // 已中止的外部 signal：请求必须真的中止
     globalThis.fetch = async (url, init) => {
       if (init.signal?.aborted) throw init.signal.reason
       throw new Error('不该走到这里')
@@ -306,7 +312,8 @@ test('handleUtterance：memory(user) → assembleFor → 逐句 + 情绪 + 记�
   }))
 
   assert.deepEqual(events.map((e) => e.type), ['emotion', 'sentence', 'sentence', 'done'])
-  assert.deepEqual(events[0], { type: 'emotion', emotion: 'kissy' })
+  // 大脑桥只吐 feiyu 原始情绪键；固件表情名由 qa.js 单次映射（避免二次映射成 neutral）
+  assert.deepEqual(events[0], { type: 'emotion', emotion: 'coquettish' })
   assert.deepEqual(events[1], { type: 'sentence', text: '你好呀。', index: 0 })
   assert.deepEqual(events[2], { type: 'sentence', text: '今天也开心！', index: 1 })
   assert.equal(events[3].fullText, '你好呀。今天也开心！')
@@ -497,6 +504,7 @@ test('listen detect 问候：不写记忆、不调 LLM', async () => {
     deviceId: 'd', chatId: 'esp32:d', text: '', isWakeGreeting: true,
   }))
   assert.deepEqual(events.map((e) => e.type), ['emotion', 'sentence', 'done'])
+  assert.deepEqual(events[0], { type: 'emotion', emotion: '' }, '问候固定中性（空键）')
   assert.equal(events[1].text, '我在呢')
   assert.equal(mem.calls.length, 0, '问候不写记忆')
   assert.equal(brain.calls.onSent.length, 0)

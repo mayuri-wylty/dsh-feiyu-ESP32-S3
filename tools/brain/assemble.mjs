@@ -89,7 +89,8 @@ function slotList(ctx) {
   const books = ledgerBlock(cfg, platform, isGroup, userText)
   if (books) add('ledger', books, 60)
   add('stickers', stickerPrompt(platform), 50)
-  if (cfg.qq?.voice_enabled !== false) add('emotion', emotionTagPrompt(platform), 51)
+  // ESP32 通道的情绪标签决定固件表情与 TTS 参考音色，不受 qq.voice_enabled 约束。
+  if (platform === 'esp32' || cfg.qq?.voice_enabled !== false) add('emotion', emotionTagPrompt(platform), 51)
 
   if (quote) add('quote', quote, 25)
   const hintKey = isGroup ? `${platform}-group` : platform

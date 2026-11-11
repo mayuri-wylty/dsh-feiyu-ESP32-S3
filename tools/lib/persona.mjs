@@ -342,8 +342,9 @@ export function buildMessages({ platform = 'qq', userText, chatId, userId, turns
   parts.push(stickerPrompt(platform))
 
   // 语气层（10-26）：语音曾经只有"略微的语气变化"—— 除了合成参数，还要她知道"现在是什么情绪"。
-  // 她自己在回复最前面打 [[撒娇]]，qq-server 剥掉标签、拿它挑语气和参考音色。只有能发语音的平台才教。
-  if (cfg.qq?.voice_enabled !== false) {
+  // 她自己在回复最前面打 [[撒娇]]，qq-server 剥掉标签、拿它挑语气和参考音色。
+  // ESP32 通道同样需要：情绪标签决定固件表情与 TTS 参考音色，所以不受 qq.voice_enabled 约束。
+  if (platform === 'esp32' || cfg.qq?.voice_enabled !== false) {
     const vp = emotionTagPrompt(platform)
     if (vp) parts.push(vp)
   }
