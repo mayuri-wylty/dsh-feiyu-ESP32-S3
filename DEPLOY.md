@@ -169,7 +169,8 @@ node tools/feiyu.mjs produce ["主题"]     # 每天有额度（douyin.produce.d
 | `8080` | `qq-server`（OneBot 上报入口） | QQ 通道 |
 | `8095` | `douyin-dm-server`（抖音私信陪聊） | 抖音私信 |
 | `3000` | NapCat HTTP | QQ 通道 |
-| `9880` | GPT-SoVITS `api_v2.py` | 语音 / 唱歌 / 视频旁白 |
+| `9880` | GPT-SoVITS `api_v2.py` | 语音 / 唱歌 / 视频旁白 / ESP32 下行 |
+| `8765` | feiyu ESP32 网关（小智 OTA + WebSocket，插件进程内） | 小智 ESP32 通道 |
 | `9222` | Chrome CDP（可选，抖音真发评论用） | 可选 |
 | `7897` | Clash / 系统代理 | 生图兜底、上网 |
 | `65466` | DSH Web GUI（每次重启会变） | — |
@@ -214,7 +215,15 @@ node tools/feiyu.mjs sing cover "天黑黑" --dry
 #    硅基 key → imageGen.api_key；参考图 → ~/.feiyu-ai/sticker-ref.jpg
 node tools/feiyu.mjs sticker gen "本鱼饿了" --tag 开心
 
-# 9) 最后开自主行为
+# 9) 小智 ESP32 通道（可选，需板子）
+#    管理员放行入站 8765（只需一次）：
+#    New-NetFirewallRule -DisplayName "feiyu-esp32" -Direction Inbound -Protocol TCP -LocalPort 8765 -Profile Private -Action Allow
+#    feiyu.config.json 里 esp32.enabled=true（默认已开）→ 重启 DSH
+#    设置页「小智 ESP32 通道」卡片复制 OTA URL（形如 http://192.168.x.x:8765/xiaozhi/ota/）
+#    固件 menuconfig 填 OTA_URL → idf.py build flash monitor
+#    token 首次启动自动生成并写回 feiyu.config.json，面板只显示「已配置」，不显示明文
+
+# 10) 最后开自主行为
 #    面板：完全自由 ON、每日回顾 ON、主动搭话 ON、干跑 OFF
 ```
 
@@ -224,9 +233,10 @@ node tools/feiyu.mjs sticker gen "本鱼饿了" --tag 开心
 node tools/feiyu.mjs selftest                 # 全绿
 curl http://127.0.0.1:8080/health             # napcat.ok=true
 curl http://127.0.0.1:8095/health             # failStreak=0
+curl http://127.0.0.1:8765/xiaozhi/ota/       # ESP32 网关返回 OTA JSON（WS 才校验 Bearer token）
 node tools/feiyu.mjs mem stats                # episodes/facts/lore 都有数
 node tools/feiyu.mjs mem recallall --chat qq:<你的号>   # 跨通道记忆块能装配出来
-npm test                                      # 8 套测试全过
+npm test                                      # 9 套测试全过
 ```
 
 ---
@@ -261,6 +271,11 @@ npm test                                      # 8 套测试全过
 | 抖音私信不回 | `failStreak` 上升 / 抓不到新消息 | `curl 8095/health`，看 `douyin-dm.log` 里「主人：」 |
 | 完全自由不动 | ① 摇号没中 ② 模型额度 429 | `feiyu-freedom.json` / 会话最后几帧 |
 | QQ 服务在跑却不回 | NapCat 掉了（`napcat.ok=false`） | `schtasks /Run /TN "DSH-Feiyu-NapCat"` |
+| ESP32 连不上网关 | ① 防火墙没放行 8765 ② `esp32.enabled=false` ③ 板子 OTA_URL 里的 IP 不是本机 WLAN 地址 | 管理员加防火墙规则；`curl 127.0.0.1:8765/xiaozhi/ota/` 自测；设置页看 `publicHost` |
+| ESP32 WS 401 | 板子 token 与 `feiyu.config.json` 的 `esp32.token` 不一致（改过配置/换过机器） | 设置页复制新 OTA URL 重新烧录，或把 token 写进固件配置 |
+| ESP32 有转写没回复 | ASR 可用但 TTS 挂了（9880 没起） | 看通道日志 `ttsFirstMs` 缺失；起 GPT-SoVITS |
+| ESP32 完全没声音 | `asrAvailable=false` 时 qa 管线降级为 echo（只回声不回答） | 确认 voice-input bundle 已启用、SenseVoice 模型已缓存 |
+| ESP32 播放中打断不了 | 板子无 AEC，播放期间不上行音频 | 用唤醒词或 BOOT 键打断（走标准 `abort`），不是 bug |
 
 ---
 

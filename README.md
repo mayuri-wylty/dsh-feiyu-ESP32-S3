@@ -28,16 +28,16 @@
 
 ---
 
-## 二、四平台能力矩阵
+## 二、五平台能力矩阵
 
-| | B站 | QQ | 微信 | 抖音 |
-|---|---|---|---|---|
-| 消息入口 | WBI API（签名 + 缓存） | NapCat（OneBot v11） | UI 自动化（wechatauto） | patchright + 本地 Chrome |
-| 模型宿主 | DSH 会话（零 API 费） | 直连 DeepSeek（秒回） | 直连 DeepSeek | 直连 DeepSeek |
-| 主动行为 | 刷视频→看懂→评论→写日记 | 私聊/群聊@回复、语音、说说、表情包 | 替主人回消息 | 自主观看、评论区经营、私信陪聊、日报 |
-| 记忆 | 主记忆 | QQ 独立记忆 + **跨通道共享** | **按联系人隔离、不进人格记忆** | 主记忆 + 兴趣(lore) + 私信记忆 |
-| 表情 | B站表情码（447 个白名单） | 图片表情（根本形象）+ 颜文字 | 图片表情 + 颜文字 | emoji + 颜文字 |
-| 语音 | — | GPT-SoVITS 音色克隆 | — | 计划中（Whisper） |
+| | B站 | QQ | 微信 | 抖音 | 小智 ESP32 |
+|---|---|---|---|---|---|
+| 消息入口 | WBI API（签名 + 缓存） | NapCat（OneBot v11） | UI 自动化（wechatauto） | patchright + 本地 Chrome | 小智 WebSocket 协议（本机网关 `:8765`） |
+| 模型宿主 | DSH 会话（零 API 费） | 直连 DeepSeek（秒回） | 直连 DeepSeek | 直连 DeepSeek | 插件进程内（大脑桥） |
+| 主动行为 | 刷视频→看懂→评论→写日记 | 私聊/群聊@回复、语音、说说、表情包 | 替主人回消息 | 自主观看、评论区经营、私信陪聊、日报 | 唤醒问候、连续对话、表情 |
+| 记忆 | 主记忆 | QQ 独立记忆 + **跨通道共享** | **按联系人隔离、不进人格记忆** | 主记忆 + 兴趣(lore) + 私信记忆 | 主记忆（`chatId=esp32:<deviceId>`） |
+| 表情 | B站表情码（447 个白名单） | 图片表情（根本形象）+ 颜文字 | 图片表情 + 颜文字 | emoji + 颜文字 | 固件表情（`llm{emotion}`，9 种情绪映射） |
+| 语音 | — | GPT-SoVITS 音色克隆 | — | 计划中（Whisper） | 上行 SenseVoice ASR + 下行 GPT-SoVITS 流式 |
 
 一句话说清每个平台：
 
@@ -45,6 +45,7 @@
 - **QQ**：常驻 `qq-server` 秒回；群聊被 @ 才回、私聊都回；能发图、能发语音条、能发空间说说。会主动找你（有安静阈值、间隔、每日上限、相似度去重）。
 - **微信**：独立 Python 进程，替主人回消息（对方不知道是自动回复），语气是她本人——有温度、会吐槽；按联系人分开记，广告/服务号跳过，钱/时间/见面不承诺。
 - **抖音**：`interact` 自主评论、`watch` 自主观看、`engage` 在自己作品评论区回评论（**任何类型**：文字、表情包、图片、只有 `[微笑]` 那种；表情包没文本可 match 时按昵称定位）、`douyin-dm-server` 私信陪聊。
+- **小智 ESP32**：板子唤醒后说一句，她按同一套人格/记忆回答，声音走 GPT-SoVITS、表情走固件。网关在插件进程内监听 `0.0.0.0:8765`，设备通过 OTA 拿地址、Bearer token 连 WS；无 AEC 的板子靠唤醒词/BOOT 键打断。
 - **B站评论区**：`replies` 三段 —— ⓪ 自己投稿下面别人的评论（同样任何类型）、① 别人对我评论的回复、② 主动去搭话；默认干跑，走 `bilibili.replies.enabled` + 日额度 + 风控闸。
 
 ---
@@ -464,7 +465,17 @@ social [--days 3] [--kind 回评] [--invisible] [--md] [--push] [--json] [--back
               "dm": { "enabled": true, "startWithDsh": true, "pollSec": 120 } },
   "web": { "roam": { "enabled": true }, "selfUpgrade": { "enabled": true }, "proxy": "http://127.0.0.1:7897" },
   "preferences": { "like": ["美食", "探店"], "dislike": ["带货", "擦边"] },
-  "guard": { "dryRun": false }
+  "guard": { "dryRun": false },
+  "esp32": {
+    "enabled": true, "port": 8765, "publicHost": "",   // publicHost 留空=按默认路由自动选网卡
+    "token": "",                                        // 留空=首次启动自动生成并写回本文件
+    "allowDevices": [],                                 // 空=不限制；填 deviceId 则只放行这些
+    "pipeline": "qa",                                   // qa 完整问答 | asr 只转写 | echo 回声联调
+    "vad": { "silenceMs": 700, "minSpeechMs": 250, "maxSpeechMs": 30000 },
+    "asr": { "primary": "sensevoice", "fallback": "" },
+    "tts": { "provider": "sovits-stream", "fallback": "" },  // 流式首包 P50 765ms（句级 2154ms）
+    "greetings": ["我在呢", "嗯？怎么啦"]                // 唤醒问候；置空数组=不问候
+  }
 }
 ```
 
@@ -591,6 +602,18 @@ node tools/feiyu.mjs report --days 1                # 观看日报（不调模�
 - 成功判定只认 `comment/publish` 接口 `status_code=0` + 新 cid（"输入框空了"会假成功）
 - 画面采样 + Whisper 音频理解：暂缓
 
+### 小智 ESP32（第五通道）
+
+- 网关在插件进程内监听 `0.0.0.0:8765`（`esp32.port`），不另起子进程；`esp32.enabled=false` 即完全关闭
+- 设备侧：`OTA_URL=http://<PC_IP>:8765/xiaozhi/ota/` → OTA 返回 WS 地址 + token → `ws://<PC_IP>:8765/xiaozhi/v1/`（`Authorization: Bearer <token>`）
+- 上行 Opus 16k/60ms/960 点 → VAD 切句 → SenseVoice 转写 → 大脑桥（同一套 persona/记忆/情绪）→ 逐句 TTS → 重采样 24k → Opus 1440 点下发
+- **唤醒问候**：`listen detect` 不写记忆、不调 LLM，只播一句 `esp32.greetings`；若被随后的 `listen start` 在出声前取消，下一轮补播一次
+- **打断**：无 AEC 的板子（如面包板）播放期间不上行音频，只能靠唤醒词或 BOOT 键打断；两者都走标准 `abort` 消息，管线侧取消本轮并回落 listening
+- **表情**：`llm{emotion}` 下发固件表情名（calm→relaxed、coquettish→kissy、shy→embarrassed…），未知回落 `neutral`
+- **TTS 默认流式**：`sovits-stream` 首包 P50 765ms / P90 1480ms，句级 `sovits-sentence` 是 2154ms / 2690ms（20 句实测，见 `docs/esp32-tts-bench.md`）
+- 设置页「小智 ESP32 通道」卡片：通道/网关状态、OTA URL 复制、在线设备、最近对话气泡、耗时 chips（面板只读，配置改 `feiyu.config.json`）
+- 防火墙：首次使用需管理员放行入站 8765（见 DEPLOY §十）
+
 ---
 
 ## 十、表情系统（根本形象）
@@ -625,6 +648,7 @@ node tools/feiyu.mjs report --days 1                # 观看日报（不调模�
 | 主动搭话 | 安静阈值、最小间隔、概率、每日上限、类型冷却、相似度 |
 | 角色设定 | `persona.md`（她每次醒来都读；她也会自己改写） |
 | 记忆库 | 最近对话 + 各平台计数（QQ/抖音/B站/上网），读失败会重试并提示 |
+| 小智 ESP32 通道 | 通道/网关状态、OTA URL 复制、在线设备、最近对话气泡、耗时 chips（只读；配置改 `feiyu.config.json`） |
 
 > 前端改完跑 `npm test`（契约 + 假 hooks 真渲染，防白屏）。
 > 面板改动是**深合并**写配置：改一个字段不会把别的字段清掉。
@@ -671,8 +695,12 @@ node tools/feiyu.mjs report --days 1                # 观看日报（不调模�
 ## 十四、测试
 
 ```bash
-npm test     # 8 套：client-smoke / client-render / stickers / imggen / memory / memory-recall / qq-human / vision
+npm test     # 9 套：client-smoke / client-render / stickers / imggen / memory / memory-recall / qq-human / vision / esp32-*
 ```
+
+- `esp32-*` 共 16 个测试文件（契约、音频、VAD、网关、状态机、ASR、TTS 三种 provider、大脑桥、三条管线、宿主接线、模拟设备），`node --test "test/esp32-*.mjs"` 自动纳入
+- `test/esp32-tts-bench.mjs` 是 TTS 对比基准脚本，不是测试：`node --test` 下自动跳过，需手动 `node test/esp32-tts-bench.mjs`（要 9880 在线）
+- 无硬件 E2E：`npm run test:e2e`（`node test/esp32-sim/run.mjs`），模拟设备走 hello→listen→stt→llm/tts→打断→token 拒绝
 
 - `memory-recall-test` 17 项断言：占位符幂等、跨通道顺序、微信不可见、当前通道不重复、grep 的 role 过滤、`recent` 不吃 `event` 行
 - 测试会先把 `USERPROFILE`/`DSH_HOME` 指到临时目录，并在开头断言 `dataDir` 落在临时目录内，否则中止
