@@ -389,7 +389,88 @@ test('abort 后不再转写，预滚缓冲清空', async () => {
   pipeline.onClose()
 })
 
-// ── 8. 构造校验 ─────────────────────────────────────────────────────────────
+// ── 8. 回归：abort 后 VAD 时间轴与预滚缓冲必须重新对齐 ──────────────────────
+// 缺陷：onAbort/onClose 清空 preroll（totalSamples→0），但自建 VAD 的 atMs 是累计的，
+// 于是第二轮 speech_end 的 atMs 远超缓冲长度 → 裁剪为空 → 整轮静默丢转写。
+// AutoStop 模式下固件每轮 tts stop 后都会重发 listen start（走 onAbort），必现。
+test('回归：abort 后第二轮仍能转写（自建 VAD 时间轴归零）', async () => {
+  const ctx = createFakeCtx()
+  const asr = createFakeAsr({ text: '第二轮' })
+  const pipeline = createAsrPipeline({
+    ctx,
+    asr,
+    config: { vad: { silenceMs: 200, minSpeechMs: 100, maxSpeechMs: 5000 } },
+  })
+
+  const quiet = () => new Int16Array(FRAME).fill(5)
+  const feedTurn = () => {
+    for (let i = 0; i < 5; i++) pipeline.onAudio(quiet(), { sampleRate: RATE })
+    for (let i = 0; i < 20; i++) pipeline.onAudio(sine(FRAME, { frequency: 300 }), { sampleRate: RATE })
+    for (let i = 0; i < 15; i++) pipeline.onAudio(quiet(), { sampleRate: RATE })
+  }
+
+  pipeline.onListenStart()
+  feedTurn()
+  await pipeline.drain()
+  assert.equal(pipeline.stats.transcribed, 1, '第一轮应转写')
+  assert.equal(pipeline.stats.skipped, 0)
+
+  pipeline.onAbort()
+  assert.equal(pipeline.preroll.totalSamples, 0)
+
+  pipeline.onListenStart()
+  feedTurn()
+  await pipeline.drain()
+  assert.equal(pipeline.stats.transcribed, 2, 'abort 后第二轮必须仍能转写')
+  assert.equal(pipeline.stats.skipped, 0, '第二轮不得因时间轴错位被跳过')
+  assert.equal(sttOf(ctx).length, 2)
+  pipeline.onClose()
+})
+
+test('回归：外部注入 VAD（累计时间轴）在 abort 后按偏移量对齐', async () => {
+  const ctx = createFakeCtx()
+  const asr = createFakeAsr({ text: '外部 VAD' })
+  // 外部 VAD 的时间轴跨轮累计（每帧 60ms，16 帧一轮），且不归本管线重置。
+  let frames = 0
+  const external = {
+    push() {
+      const events = []
+      const atMs = frames * 60
+      if (frames % 16 === 0) events.push({ type: 'speech_start', atMs })
+      frames += 1
+      if (frames % 16 === 0) events.push({ type: 'speech_end', atMs: frames * 60, reason: 'silence' })
+      return events
+    },
+    flush: () => [],
+    reset() { throw new Error('外部 VAD 不应被管线重置') },
+    state: 'silence',
+    isSpeech: false,
+    noiseFloor: 0,
+    thresholds: { start: 0, end: 0 },
+    stats: { frames: 0, voicedFrames: 0, segments: 0 },
+    config: {},
+  }
+  const pipeline = createAsrPipeline({ ctx, asr, vad: external, config: { vad: { minSpeechMs: 250 } } })
+
+  const feed = () => {
+    for (let i = 0; i < 16; i++) pipeline.onAudio(sine(FRAME, { frequency: 300 }), { sampleRate: RATE })
+  }
+
+  pipeline.onListenStart()
+  feed()
+  await pipeline.drain()
+  assert.equal(pipeline.stats.transcribed, 1)
+
+  pipeline.onAbort()
+  pipeline.onListenStart()
+  feed()
+  await pipeline.drain()
+  assert.equal(pipeline.stats.transcribed, 2, '外部 VAD 第二轮应按偏移量正确裁剪')
+  assert.equal(pipeline.stats.skipped, 0)
+  pipeline.onClose()
+})
+
+// ── 9. 构造校验 ─────────────────────────────────────────────────────────────
 test('缺少 asr / ctx 时抛 TypeError', () => {
   assert.throws(() => createAsrPipeline({}), TypeError)
   assert.throws(() => createAsrPipeline({ ctx: createFakeCtx() }), TypeError)
