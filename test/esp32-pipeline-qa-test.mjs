@@ -549,3 +549,103 @@ test('缺少 ctx / tts / brain 时抛 TypeError', () => {
   assert.throws(() => createQaPipeline({ ctx, asr: createFakeAsr(), brain: createFakeBrain() }), TypeError)
   assert.throws(() => createQaPipeline({ ctx, asr: createFakeAsr(), tts: createFakeTts() }), TypeError)
 })
+
+// ── 9. listen detect 唤醒问候（T25）─────────────────────────────────────────
+/** 可控制时机的 brain：问候分支可被 gate 卡住，用于模拟「被 listen start 取消」。 */
+function createGreetingBrain({ greeting = '我在呢', gate = null } = {}) {
+  const calls = []
+  return {
+    calls,
+    async *handleUtterance(args) {
+      calls.push(args)
+      if (args.isWakeGreeting) {
+        if (gate) await gate
+        if (args.signal?.aborted) return
+        yield { type: 'emotion', emotion: '' }
+        if (greeting) yield { type: 'sentence', text: greeting, index: 0 }
+        yield { type: 'done', fullText: greeting }
+        return
+      }
+      yield { type: 'emotion', emotion: 'happy' }
+      yield { type: 'sentence', text: '回答。', index: 0 }
+      yield { type: 'done', fullText: '回答。' }
+    },
+  }
+}
+
+test('listen detect：播固定问候，不写记忆、不调 LLM', async () => {
+  const ctx = createFakeCtx()
+  const tts = createFakeTts()
+  const brain = createGreetingBrain({ greeting: '我在呢' })
+  const channelLog = createFakeChannelLog()
+  const pipeline = createQaPipeline({ ctx, asr: createFakeAsr(), tts, brain, channelLog })
+
+  pipeline.onListenStart({ mode: 'auto', detect: true, text: '大肥鱼' })
+  await pipeline.drain()
+
+  assert.equal(brain.calls.length, 1)
+  assert.equal(brain.calls[0].isWakeGreeting, true, '应走唤醒问候分支')
+  assert.equal(brain.calls[0].text, '', '问候不带用户文本')
+  assert.deepEqual(ttsEvents(ctx).map((e) => e.state), ['start', 'sentence_start', 'stop'])
+  assert.equal(ttsEvents(ctx)[1].text, '我在呢')
+  assert.ok(ctx.sentBinary.length > 0, '问候应下发音频')
+  assert.equal(channelLog.entries.length, 0, '问候不写通道日志（不写记忆）')
+  pipeline.onClose()
+})
+
+test('listen detect：greetings 为空时不播任何 TTS', async () => {
+  const ctx = createFakeCtx()
+  const tts = createFakeTts()
+  const brain = createGreetingBrain({ greeting: '' })
+  const pipeline = createQaPipeline({ ctx, asr: createFakeAsr(), tts, brain })
+
+  pipeline.onListenStart({ mode: 'auto', detect: true, text: '大肥鱼' })
+  await pipeline.drain()
+
+  assert.equal(ttsEvents(ctx).length, 0, '空问候不应下发 tts')
+  assert.equal(ctx.sentBinary.length, 0)
+  pipeline.onClose()
+})
+
+test('listen detect 被 listen start 取消且未出声：在下一轮补播一次', async () => {
+  const ctx = createFakeCtx()
+  const tts = createFakeTts()
+  let release
+  const gate = new Promise((resolve) => {
+    release = resolve
+  })
+  const brain = createGreetingBrain({ greeting: '我在呢', gate })
+  const pipeline = createQaPipeline({ ctx, asr: createFakeAsr(), tts, brain })
+
+  pipeline.onListenStart({ mode: 'auto', detect: true, text: '大肥鱼' })
+  // 固件紧接着发 listen start：会话取消 detect 轮次
+  pipeline.onAbort()
+  pipeline.onListenStart({ mode: 'auto' })
+  release()
+  await pipeline.drain()
+
+  const greetings = brain.calls.filter((c) => c.isWakeGreeting)
+  assert.equal(greetings.length, 2, 'detect 一次 + 补播一次')
+  const starts = ttsEvents(ctx).filter((e) => e.state === 'sentence_start')
+  assert.equal(starts.length, 1, '只应真正播一次问候')
+  assert.equal(starts[0].text, '我在呢')
+  pipeline.onClose()
+})
+
+test('listen detect 已出声后被取消：不再补播', async () => {
+  const ctx = createFakeCtx()
+  const tts = createFakeTts()
+  const brain = createGreetingBrain({ greeting: '我在呢' })
+  const pipeline = createQaPipeline({ ctx, asr: createFakeAsr(), tts, brain })
+
+  pipeline.onListenStart({ mode: 'auto', detect: true, text: '大肥鱼' })
+  await pipeline.drain()
+  // 用户开始说话：listen start 取消 detect 轮次
+  pipeline.onAbort()
+  pipeline.onListenStart({ mode: 'auto' })
+  await pipeline.drain()
+
+  const starts = ttsEvents(ctx).filter((e) => e.state === 'sentence_start')
+  assert.equal(starts.length, 1, '已出声的问候不应重复')
+  pipeline.onClose()
+})
