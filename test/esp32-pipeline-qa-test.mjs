@@ -550,6 +550,24 @@ test('缺少 ctx / tts / brain 时抛 TypeError', () => {
   assert.throws(() => createQaPipeline({ ctx, asr: createFakeAsr(), tts: createFakeTts() }), TypeError)
 })
 
+test('llm{emotion} 下发固件表情名（feiyu 情绪 → 固件名）', async () => {
+  const ctx = createFakeCtx()
+  const tts = createFakeTts()
+  const brain = createFakeBrain({ sentences: ['好。'], emotion: 'coquettish' })
+  const vad = createScriptedVad(
+    scriptOf(14, {
+      0: { type: 'speech_start', atMs: 0 },
+      13: { type: 'speech_end', atMs: 800, reason: 'silence' },
+    }),
+  )
+  const pipeline = createQaPipeline({ ctx, asr: createFakeAsr(), tts, brain, vad, config: { vad: { minSpeechMs: 250 } } })
+  await runOneTurn(pipeline)
+
+  const llm = ctx.events.find((e) => e.kind === 'llm')
+  assert.equal(llm.emotion, 'kissy', 'coquettish 应映射为固件表情 kissy')
+  pipeline.onClose()
+})
+
 // ── 9. listen detect 唤醒问候（T25）─────────────────────────────────────────
 /** 可控制时机的 brain：问候分支可被 gate 卡住，用于模拟「被 listen start 取消」。 */
 function createGreetingBrain({ greeting = '我在呢', gate = null } = {}) {
@@ -590,6 +608,7 @@ test('listen detect：播固定问候，不写记忆、不调 LLM', async () => 
   assert.equal(ttsEvents(ctx)[1].text, '我在呢')
   assert.ok(ctx.sentBinary.length > 0, '问候应下发音频')
   assert.equal(channelLog.entries.length, 0, '问候不写通道日志（不写记忆）')
+  assert.equal(ctx.transitions.at(-1), 'listening', '问候播完应回落 listening')
   pipeline.onClose()
 })
 
