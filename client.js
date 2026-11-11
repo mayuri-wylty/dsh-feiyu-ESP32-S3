@@ -288,7 +288,7 @@ textarea.fy-input{width:100%;min-height:136px;resize:vertical;line-height:1.65;f
 				title: "小智 ESP32 通道",
 				extra: h("div", { className: "fy-row", style: { margin: 0 } },
 					h("button", { className: "fy-btn", onClick: load, disabled: busy }, busy ? "刷新中…" : "刷新")),
-				hint: "ESP32 语音终端（小智协议）走本机网关：设备连上后可直接对话。开关与端口在 ~/.dsh/feiyu.config.json 的 esp32 段配置（面板暂只读）。",
+				hint: "ESP32 语音终端（小智协议）走本机网关：设备连上后可直接对话。配置在 ~/.dsh/feiyu.config.json 的 esp32 段（可由 /dsh-feiyu/api/config 写入；token 仅限本机生成或手编，不接受回写）。",
 			},
 				err ? h("div", { className: "fy-notice err" }, "ESP32 状态读取失败：" + err) : null,
 

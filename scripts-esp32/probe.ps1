@@ -101,12 +101,19 @@ function Get-DshHostProcess {
 }
 
 function Get-DshWebPort {
-    param([int]$HostProcessId)
-    $conn = Get-NetTCPConnection -State Listen -OwningProcess $HostProcessId -ErrorAction SilentlyContinue |
-        Where-Object { $_.LocalAddress -in @('127.0.0.1', '::1') } |
-        Select-Object -First 1
-    if ($null -ne $conn) { return [int]$conn.LocalPort }
-    return $null
+    param([int]$HostProcessId, [int]$ExcludePort = 8765)
+    # 宿主进程同时监听 DSH 自己的 HTTP 与 feiyu 的 ESP32 网关（默认 8765），
+    # 不能随便取第一个 loopback 端口。先排除网关端口，再按 HTTP 探活挑出
+    # 真正回 200/401/403 的那个（DSH 对未鉴权请求回 401）。
+    $candidates = Get-NetTCPConnection -State Listen -OwningProcess $HostProcessId -ErrorAction SilentlyContinue |
+        Where-Object { $_.LocalAddress -in @('127.0.0.1', '::1') -and $_.LocalPort -ne $ExcludePort } |
+        Select-Object -ExpandProperty LocalPort -Unique
+    if (-not $candidates) { return $null }
+    foreach ($port in $candidates) {
+        $status = Get-HttpStatus -Url "http://127.0.0.1:$port/" -TimeoutSec 2
+        if ($status -in @(200, 401, 403)) { return [int]$port }
+    }
+    return [int]($candidates | Select-Object -First 1)
 }
 
 Write-Host '=== 小智 ESP32 第五通道 · T01 环境探活 ===' -ForegroundColor Cyan
