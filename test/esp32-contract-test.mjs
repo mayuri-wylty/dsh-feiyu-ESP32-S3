@@ -70,7 +70,7 @@ test('默认 esp32 配置形状', () => {
   assert.equal(c.vad.silenceMs, 700)
   assert.equal(c.vad.maxSpeechMs, 30000)
   assert.equal(c.asr.primary, 'sensevoice')
-  assert.equal(c.tts.provider, 'sovits-sentence')
+  assert.equal(c.tts.provider, 'sovits-stream')
   assert.ok(Array.isArray([...c.greetings]))
 })
 
