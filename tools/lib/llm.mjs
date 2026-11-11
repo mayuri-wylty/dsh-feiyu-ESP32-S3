@@ -37,6 +37,33 @@ function headers() {
   return headersOf({ ..._cfg(), api_key: apiKey() })
 }
 
+/**
+ * 请求用的 signal：外部 signal 与超时**同时生效**。
+ *
+ * 以前写的是 `opts.signal ?? AbortSignal.timeout(...)` —— 传了外部 signal 就完全没有超时，
+ * 上游卡住时这一轮永远不结束（ESP32 通道会一直停在 thinking）。反过来，只给超时又会
+ * 让调用方的打断失效。两者必须合并。
+ */
+function signalFor(opts, defaultMs) {
+  const ms = Number(opts.timeoutMs) > 0 ? Number(opts.timeoutMs) : defaultMs
+  const timeout = AbortSignal.timeout(ms)
+  const external = opts.signal
+  if (!external) return timeout
+  if (typeof AbortSignal.any === 'function') return AbortSignal.any([external, timeout])
+  // 旧 Node 没有 AbortSignal.any：手工合并（任一触发即中止）
+  const ac = new AbortController()
+  const onAbort = (src) => () => {
+    ac.abort(src.reason)
+  }
+  if (external.aborted) ac.abort(external.reason)
+  else if (timeout.aborted) ac.abort(timeout.reason)
+  else {
+    external.addEventListener('abort', onAbort(external), { once: true })
+    timeout.addEventListener('abort', onAbort(timeout), { once: true })
+  }
+  return ac.signal
+}
+
 function payloadOf(c, messages, opts = {}) {
   return {
     model: opts.model || c.model || 'deepseek-chat',
@@ -65,7 +92,7 @@ export async function chat(messages, opts = {}) {
       method: 'POST',
       headers: headersOf({ ...c, api_key: c.api_key || apiKey() }),
       body: JSON.stringify(payloadOf(c, messages, opts)),
-      signal: opts.signal ?? AbortSignal.timeout(opts.timeoutMs || 90000),
+      signal: signalFor(opts, 90000),
     })
     if (!r.ok) throw new Error(`LLM HTTP ${r.status}: ${(await r.text()).slice(0, 200)}`)
     const j = await r.json()
@@ -94,7 +121,7 @@ export async function* chatStream(messages, opts = {}) {
     method: 'POST',
     headers: headers(),
     body: JSON.stringify(payload(messages, { ...opts, stream: true })),
-    signal: opts.signal ?? AbortSignal.timeout(120000),
+    signal: signalFor(opts, 120000),
   })
   if (!r.ok) throw new Error(`LLM HTTP ${r.status}`)
   const reader = r.body.getReader()
