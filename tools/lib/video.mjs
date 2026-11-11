@@ -22,8 +22,8 @@ import { execFileSync, spawnSync } from 'node:child_process'
 import { config } from './config.mjs'
 import { dataPath } from './paths.mjs'
 
-const FFMPEG_FALLBACKS = ['D:/rvc/bin/ffmpeg.exe', 'D:/GPT-SoVITS/runtime/ffmpeg.exe', 'ffmpeg']
-const FFPROBE_FALLBACKS = ['D:/rvc/bin/ffprobe.exe', 'D:/GPT-SoVITS/runtime/ffprobe.exe', 'ffprobe']
+const FFMPEG_FALLBACKS = ['D:/rvc/bin/ffmpeg.exe', 'D:/AI_Code/小智机器人/GPT-SoVITS/runtime/ffmpeg.exe', 'ffmpeg']
+const FFPROBE_FALLBACKS = ['D:/rvc/bin/ffprobe.exe', 'D:/AI_Code/小智机器人/GPT-SoVITS/runtime/ffprobe.exe', 'ffprobe']
 
 /**
  * 选 ffmpeg：video.ffmpeg → D:/rvc/bin（实测可用）→ rvc.ffmpeg（那是给换声用的，

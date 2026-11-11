@@ -30,7 +30,7 @@ export function pythonPath(cfg = config()) {
   const cands = [
     cfg.voice?.python,
     process.env.FEIYU_TTS_PYTHON,
-    'D:/GPT-SoVITS/.venv/Scripts/python.exe',
+    'D:/AI_Code/小智机器人/GPT-SoVITS/.venv/Scripts/python.exe',
   ].filter(Boolean)
   for (const c of cands) {
     try {

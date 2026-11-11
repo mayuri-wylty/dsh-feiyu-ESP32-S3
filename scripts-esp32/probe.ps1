@@ -23,7 +23,7 @@
     DSH 数据目录，默认 %USERPROFILE%\.dsh。
 
 .PARAMETER SovitsRoot
-    GPT-SoVITS 根目录，默认 D:\GPT-SoVITS（用于自动找参考音）。
+    GPT-SoVITS 根目录，默认 D:\AI_Code\小智机器人\GPT-SoVITS（用于自动找参考音）。
 
 .PARAMETER SovitsUrl
     GPT-SoVITS api_v2 地址，默认 http://127.0.0.1:9880。
@@ -45,14 +45,14 @@
     pwsh -File .\probe.ps1
 
 .EXAMPLE
-    pwsh -File .\probe.ps1 -RefAudio 'D:\GPT-SoVITS\models\yinlang\yinlang.wav' -PromptText '参考音的原话'
+    pwsh -File .\probe.ps1 -RefAudio 'D:\AI_Code\小智机器人\GPT-SoVITS\models\yinlang\yinlang.wav' -PromptText '参考音的原话'
 #>
 [CmdletBinding()]
 param(
     [string]$DshInstallDir = 'D:\DSH桌面版',
     [string]$ProfileDir = (Join-Path $env:USERPROFILE '.dsh\profiles\desktop'),
     [string]$DshHome = (Join-Path $env:USERPROFILE '.dsh'),
-    [string]$SovitsRoot = 'D:\GPT-SoVITS',
+    [string]$SovitsRoot = 'D:\AI_Code\小智机器人\GPT-SoVITS',
     [string]$SovitsUrl = 'http://127.0.0.1:9880',
     [string]$RefAudio = '',
     [string]$PromptText = '',

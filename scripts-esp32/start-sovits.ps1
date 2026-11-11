@@ -5,7 +5,7 @@
 
 .DESCRIPTION
     dsh-feiyu 的语音链路依赖 GPT-SoVITS：
-      - 安装目录默认 D:\GPT-SoVITS
+      - 安装目录默认 D:\AI_Code\小智机器人\GPT-SoVITS
       - Python 默认 <Root>\.venv\Scripts\python.exe（也兼容 runtime\python.exe）
       - 入口默认 <Root>\api_v2.py
       - 参考音默认 <Root>\models\<音色>\<音色>.wav + 同名 .txt
@@ -15,7 +15,7 @@
     并打印安装/通过标准。
 
 .PARAMETER Root
-    GPT-SoVITS 根目录，默认 D:\GPT-SoVITS。
+    GPT-SoVITS 根目录，默认 D:\AI_Code\小智机器人\GPT-SoVITS。
 
 .PARAMETER Python
     指定 Python 解释器；不传则依次探测 <Root>\.venv\Scripts\python.exe、
@@ -41,7 +41,7 @@
 #>
 [CmdletBinding()]
 param(
-    [string]$Root = 'D:\GPT-SoVITS',
+    [string]$Root = 'D:\AI_Code\小智机器人\GPT-SoVITS',
     [string]$Python = '',
     [string]$BindHost = '127.0.0.1',
     [int]$Port = 9880,
@@ -103,9 +103,9 @@ if (-not (Test-Path -LiteralPath $Root)) {
     Write-Host ''
     Write-Host '[BLOCKED-USER] 本机没有安装 GPT-SoVITS，dsh-feiyu 的语音链路无法拉起。' -ForegroundColor Yellow
     Write-Host '  需要人工完成：'
-    Write-Host '    1) 安装 GPT-SoVITS（含 api_v2.py 与 Python 运行环境）到 D:\GPT-SoVITS，'
+    Write-Host '    1) 安装 GPT-SoVITS（含 api_v2.py 与 Python 运行环境）到 D:\AI_Code\小智机器人\GPT-SoVITS，'
     Write-Host '       或把本脚本 -Root 指向已有安装目录。'
-    Write-Host '    2) 准备参考音：D:\GPT-SoVITS\models\<音色>\<音色>.wav 与同名 .txt（文本须与音频一致）。'
+    Write-Host '    2) 准备参考音：D:\AI_Code\小智机器人\GPT-SoVITS\models\<音色>\<音色>.wav 与同名 .txt（文本须与音频一致）。'
     Write-Host '    3) 重新运行：pwsh -File .\start-sovits.ps1'
     Write-Host '  通过标准：http://127.0.0.1:9880/docs 返回 HTTP 200，且 /tts 能返回 WAV。'
     exit 2

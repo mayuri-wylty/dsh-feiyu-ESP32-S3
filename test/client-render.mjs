@@ -21,11 +21,11 @@ const CONFIG = {
   quota: { shareDaily: 3 },
   douyin: { maxPerRun: 2 },
   qq: { voice_chance: 0.5 },
-  voice: { ref_audio_path: 'D:/GPT-SoVITS/models/sunshine_girl/sunshine_girl.wav' },
+  voice: { ref_audio_path: 'D:/AI_Code/小智机器人/GPT-SoVITS/models/sunshine_girl/sunshine_girl.wav' },
 }
 const VOICES = [
-  { name: 'sunshine_girl', ref_audio_path: 'D:/GPT-SoVITS/models/sunshine_girl/sunshine_girl.wav', prompt_text: '参考文本', has_prompt: true },
-  { name: 'mute', ref_audio_path: 'D:/GPT-SoVITS/models/mute/mute.wav', prompt_text: '', has_prompt: false },
+  { name: 'sunshine_girl', ref_audio_path: 'D:/AI_Code/小智机器人/GPT-SoVITS/models/sunshine_girl/sunshine_girl.wav', prompt_text: '参考文本', has_prompt: true },
+  { name: 'mute', ref_audio_path: 'D:/AI_Code/小智机器人/GPT-SoVITS/models/mute/mute.wav', prompt_text: '', has_prompt: false },
 ]
 const RESPONSES = {
   '/dsh-feiyu/api/config': { ok: true, config: CONFIG, voices: VOICES, configPath: 'C:/Users/x/.dsh/feiyu.config.json' },

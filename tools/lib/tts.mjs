@@ -170,7 +170,7 @@ function speechSeconds(file, dur = 0) {
 function probeSeconds(file) {
   const v = config().voice ?? {}
   const cands = [v.ffprobe, config().video?.ffprobe, 'D:/rvc/bin/ffprobe.exe',
-    'D:/GPT-SoVITS/runtime/ffprobe.exe', 'ffprobe'].filter(Boolean)
+    'D:/AI_Code/小智机器人/GPT-SoVITS/runtime/ffprobe.exe', 'ffprobe'].filter(Boolean)
   for (const bin of cands) {
     try {
       if (bin !== 'ffprobe' && !fs.existsSync(bin)) continue

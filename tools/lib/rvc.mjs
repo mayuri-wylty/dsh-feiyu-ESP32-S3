@@ -61,7 +61,7 @@ function runRvc(args, { onLine } = {}) {
     // （webui 靠便携 runtime 的 .pth 才没炸，我们自己的 venv 得显式给）
     // PATH 前插 ffmpeg/ffprobe 所在目录：infer/audio.py 用 ffmpeg-python 解码音频，
     // 二进制必须能被找到（GPT-SoVITS runtime 有 ffmpeg.exe，ffprobe 在 D:/rvc/bin）
-    const extraPath = [config().rvc?.binPath || 'D:/rvc/bin', path.dirname(config().rvc?.ffmpeg || 'D:/GPT-SoVITS/runtime/ffmpeg.exe')]
+    const extraPath = [config().rvc?.binPath || 'D:/rvc/bin', path.dirname(config().rvc?.ffmpeg || 'D:/AI_Code/小智机器人/GPT-SoVITS/runtime/ffmpeg.exe')]
       .filter((p) => fs.existsSync(p)).join(path.delimiter)
     const child = spawn(RVC_PY(), args, { cwd: root, windowsHide: true, env: { ...process.env, PYTHONIOENCODING: 'utf-8', PYTHONUTF8: '1', PYTHONPATH: root, PYTORCH_CUDA_ALLOC_CONF: 'expandable_segments:True', ...(extraPath ? { PATH: extraPath + path.delimiter + (process.env.PATH || '') } : {}) } })
     let tail = []

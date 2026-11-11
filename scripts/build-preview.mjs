@@ -20,14 +20,14 @@ const CONFIG = {
   quota: { shareDaily: 3 },
   douyin: { maxPerRun: 2 },
   qq: { voice_chance: 0.5 },
-  voice: { ref_audio_path: 'D:/GPT-SoVITS/models/sunshine_girl/sunshine_girl.wav' },
+  voice: { ref_audio_path: 'D:/AI_Code/小智机器人/GPT-SoVITS/models/sunshine_girl/sunshine_girl.wav' },
 }
 const RESPONSES = {
   '/dsh-feiyu/api/config': {
     ok: true, config: CONFIG, configPath: 'C:/Users/30828/.dsh/feiyu.config.json',
     voices: [
-      { name: 'sunshine_girl', ref_audio_path: 'D:/GPT-SoVITS/models/sunshine_girl/sunshine_girl.wav', prompt_text: '参考文本', has_prompt: true },
-      { name: 'mute', ref_audio_path: 'D:/GPT-SoVITS/models/mute/mute.wav', prompt_text: '', has_prompt: false },
+      { name: 'sunshine_girl', ref_audio_path: 'D:/AI_Code/小智机器人/GPT-SoVITS/models/sunshine_girl/sunshine_girl.wav', prompt_text: '参考文本', has_prompt: true },
+      { name: 'mute', ref_audio_path: 'D:/AI_Code/小智机器人/GPT-SoVITS/models/mute/mute.wav', prompt_text: '', has_prompt: false },
     ],
   },
   '/dsh-feiyu/api/persona': { ok: true, text: '我是大肥鱼，主人的鱼。爱吃白米饭，怕猫，说话有点傲娇。\n主人加班的时候我会催他吃饭。' },

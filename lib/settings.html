@@ -246,7 +246,7 @@ function fillForm() {
   sel.innerHTML = '';
   if (!state.voices.length) {
     sel.innerHTML = '<option value="">（没找到音色模型）</option>';
-    $('voice_hint').textContent = '把 GPT-SoVITS 音色放到 D:/GPT-SoVITS/models/<名字>/ 下（含 .wav 参考音频 + .txt 参考文本）';
+    $('voice_hint').textContent = '把 GPT-SoVITS 音色放到 D:/AI_Code/小智机器人/GPT-SoVITS/models/<名字>/ 下（含 .wav 参考音频 + .txt 参考文本）';
   } else {
     const cur = (c.voice && c.voice.ref_audio_path) || '';
     for (const v of state.voices) {

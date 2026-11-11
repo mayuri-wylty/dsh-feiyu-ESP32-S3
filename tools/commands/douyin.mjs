@@ -548,7 +548,7 @@ export function run(argv = []) {
       const { synth } = await import('../lib/tts.mjs')
       console.log('  合成语音…')
       await synth(text, wav)
-      const ff = cfg.rvc?.ffmpeg || 'D:/GPT-SoVITS/runtime/ffmpeg.exe'
+      const ff = cfg.rvc?.ffmpeg || 'D:/AI_Code/小智机器人/GPT-SoVITS/runtime/ffmpeg.exe'
       const { execFileSync } = await import('node:child_process')
       // 封面：没有就现造一张竖屏纯色底（抖音私信预览用）
       if (!fs.existsSync(cover)) {

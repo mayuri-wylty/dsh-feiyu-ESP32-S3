@@ -15,7 +15,7 @@
 | voice-input bundle | 已启用（在 `dsh.profile.bundles` 中），SenseVoice 本地模型已缓存到 `~/.dsh/speech-to-text` |
 | 127.0.0.1:3080 API | 桌面版**不使用固定 3080**，而是动态端口（本次 `59737`）；所有请求需 per-process token/cookie，未鉴权返回 401，外部 agent 不能直接调用 `/dsh-feiyu/api/*` |
 | 插件重载 | desktop profile 无 HMR；链接插件代码变更需**重启桌面版**；bundle 启用/禁用可由插件管理器热应用，直接改 package.json 后需重启 |
-| GPT-SoVITS :9880 | **BLOCKED-USER**：本机未安装 `D:\GPT-SoVITS`，9880 无监听，无 python 进程，`~/.dsh/feiyu.config.json` 与 `~/.feiyu-ai` 均不存在 |
+| GPT-SoVITS :9880 | **已就绪（2026-11-11 实测）**：安装于 `D:\AI_Code\小智机器人\GPT-SoVITS`（21 GB，venv Python 3.10.11 + torch 2.7.1+cu128，CUDA 可用），参考音 `models\feiyu\feiyu.wav` 就位；`GET /docs` 200，`POST /tts` 返回有效 WAV，`streaming_mode:2` 为 44 字节头 + 32 kHz PCM16LE 单声道 |
 | ESP-IDF | **已完成**：v6.0.1 克隆并安装到 `D:\AI_Code\小智机器人\tools\esp-idf`（工具目录 `D:\Espressif`），`export.ps1` 与版本验证通过 |
 
 ## 1. DSH 桌面版
@@ -174,33 +174,39 @@ profile `package.json` 关键内容：
 
 | 项 | 值 |
 | --- | --- |
-| 根目录 | `D:\GPT-SoVITS` |
-| Python | `D:\GPT-SoVITS\.venv\Scripts\python.exe`（插件默认） |
-| 入口 | `D:\GPT-SoVITS\api_v2.py` |
+| 根目录 | `D:\AI_Code\小智机器人\GPT-SoVITS` |
+| Python | `D:\AI_Code\小智机器人\GPT-SoVITS\.venv\Scripts\python.exe`（插件默认） |
+| 入口 | `D:\AI_Code\小智机器人\GPT-SoVITS\api_v2.py` |
 | 启动参数 | `api_v2.py -a 127.0.0.1 -p 9880` |
 | TTS 接口 | `POST http://127.0.0.1:9880/tts` |
-| 参考音 | `D:\GPT-SoVITS\models\<音色>\<音色>.wav` + 同名 `.txt` |
+| 参考音 | `D:\AI_Code\小智机器人\GPT-SoVITS\models\<音色>\<音色>.wav` + 同名 `.txt` |
 | 插件自动拉起 | `ensureSovits()` 每 60s 检查；仅当 QQ 进程在跑或 `qq.startWithDsh=true` 时拉起 |
 
-### 2.2 本次探测结果
+### 2.2 本次探测结果（2026-11-11 复测）
 
 | 检查 | 结果 |
 | --- | --- |
-| `D:\GPT-SoVITS` | **MISSING** |
-| `127.0.0.1:9880` 监听 | **无**（连接被拒绝） |
-| `python` 进程中 `api_v2.py` | **无** |
-| `C:\Users\20323\.dsh\feiyu.config.json` | **MISSING** |
-| `C:\Users\20323\.feiyu-ai` | **MISSING** |
-| `GET /docs` | 连接失败 |
+| `D:\AI_Code\小智机器人\GPT-SoVITS` | **存在**（21 GB；由旧 `D:\GPT-SoVITS` 整体迁移而来，新装副本暂存为 `GPT-SoVITS-new-py312`） |
+| `.venv\Scripts\python.exe` | **可用**：Python 3.10.11，torch 2.7.1+cu128，`torch.cuda.is_available()=True` |
+| 参考音 | **存在**：`models\feiyu\feiyu.wav`（302,126 B）+ `feiyu.txt` |
+| `127.0.0.1:9880` 监听 | **有**（uvicorn） |
+| `GET /docs` | **200** |
+| `POST /tts`（普通） | **200 / audio/wav**，462,124 B；32 kHz / 16 bit / 单声道，约 7.2 s（首次含模型预热 18.5 s） |
+| `POST /tts`（`streaming_mode:2`） | **200 / audio/wav**；首字节 4.8 ms；44 字节 WAV 头（`data` size=0）+ 32 kHz PCM16LE，全文件仅 1 个 RIFF 头 |
+| `C:\Users\20323\.dsh\feiyu.config.json` | **存在**（仅含 esp32 token 段） |
+| `C:\Users\20323\.feiyu-ai` | **存在**（空目录） |
 
-### 2.3 状态：BLOCKED-USER
+### 2.3 状态：已就绪
 
-本机没有安装 GPT-SoVITS，语音链路（说话/试听/视频旁白）无法拉起。需要人工完成：
+2026-11-10 首轮探测曾判定 BLOCKED-USER（当时本机没有安装）。2026-11-11 已完成安装与迁移：
 
-1. 安装 GPT-SoVITS（含 `api_v2.py` 与 Python 运行环境）到 `D:\GPT-SoVITS`，或准备一个已有安装目录并通过 `-Root` 指定。
-2. 准备参考音：`D:\GPT-SoVITS\models\<音色>\<音色>.wav` 与同名 `.txt`，文本必须与音频内容一致。
-3. 运行 `pwsh -File .\start-sovits.ps1`。
-4. **通过标准**：`http://127.0.0.1:9880/docs` 返回 HTTP 200；`probe.ps1` 的 `POST /tts` 能返回有效 WAV（RIFF/WAVE，> 2 KB）。
+1. 旧的 `D:\GPT-SoVITS`（21 GB，含工作 venv 与参考音）整体移动到 `D:\AI_Code\小智机器人\GPT-SoVITS`；新装副本先改名为 `GPT-SoVITS-new-py312`（14 GB，Python 3.12，**不含 `models/`**）暂存。
+2. venv 内 7 个含旧绝对路径的文件已修正，插件内 23 个文件共 64 处硬编码路径同步更新（`git diff --stat` 可查），`npm test` 309/309 通过。
+3. 启动方式不变：`pwsh -File .\start-sovits.ps1`，等价于在根目录执行
+   `.venv\Scripts\python.exe api_v2.py -a 127.0.0.1 -p 9880 -c GPT_SoVITS/configs/tts_infer.yaml`（`tts_infer.yaml` 内全部为相对路径，cwd 必须是仓库根）。
+4. **通过标准（已达成）**：`/docs` 返回 200；`/tts` 返回有效 WAV（RIFF/WAVE，> 2 KB）；`streaming_mode:2` 为 44 字节头 + 裸 PCM。
+
+> 注：`GPT-SoVITS-new-py312` 只是备份，确认稳定后可删除以回收 14 GB。
 
 ## 3. ESP-IDF（要求 ≥ v6.0.1）
 
@@ -309,7 +315,7 @@ pwsh -File .\probe.ps1
 `probe.ps1` 在 GPT-SoVITS 已安装后会自动找参考音；也可以显式传：
 
 ```powershell
-pwsh -File .\probe.ps1 -RefAudio 'D:\GPT-SoVITS\models\yinlang\yinlang.wav' -PromptText '参考音的原话'
+pwsh -File .\probe.ps1 -RefAudio 'D:\AI_Code\小智机器人\GPT-SoVITS\models\yinlang\yinlang.wav' -PromptText '参考音的原话'
 ```
 
 ## 5. 本次探活真实输出
@@ -330,15 +336,16 @@ pwsh -File .\probe.ps1 -RefAudio 'D:\GPT-SoVITS\models\yinlang\yinlang.wav' -Pro
 存在 BLOCKED 项：需要人工安装/配置后重跑（见 env.md 的“未完成/人工步骤”）。
 ```
 
-> 说明：早期版本曾把 `createdAt` 打印成 `2026-11-10 07:01:55Z` 之外的时区偏移（PowerShell `ConvertFrom-Json` 的 DateTime 与 `DateTimeOffset::Parse` 叠加导致）；现已改为 `[datetimeoffset]$night.createdAt`，保留原 JSON 的 `Z`/UTC 语义，探活结论不变。以上为 2026-11-10 15:58:31 的最终实测输出（退出码 2，GPT-SoVITS 仍为 BLOCKED-USER）。
+> 说明：以上为 **2026-11-10 15:58:31 的历史实测输出**（退出码 2，当时 GPT-SoVITS 尚未安装）。`createdAt` 的时区偏移问题已修复（改用 `[datetimeoffset]$night.createdAt`），探活结论不受影响。**2026-11-11 复测**：GPT-SoVITS 两项已由 BLOCKED 转为 PASS——`/docs` 200，`/tts` 普通模式与 `streaming_mode:2` 均返回有效 WAV（详见 §2.2 / §2.3）。
 
-## 6. 未完成 / 人工步骤（BLOCKED-USER）
+## 6. 未完成 / 人工步骤
 
-1. **GPT-SoVITS 未安装**：按 §2.3 安装并准备参考音，然后运行 `start-sovits.ps1` 和 `probe.ps1`。通过标准：`/docs` 200 且 `/tts` 返回 WAV。
+1. ~~**GPT-SoVITS 未安装**~~ → **已完成（2026-11-11）**：安装/迁移完毕，参考音就位，`:9880` 合成实测通过（§2.2）。
 2. **DSH API 外部调用**：桌面版使用动态端口 + per-process token，外部 agent 无法直接调用 `/dsh-feiyu/api/*`。如果后续任务需要自动调用，需另行设计受控入口（不要提取/落盘 token）。
 3. **voice-input**：当前已启用且模型已缓存，无需人工操作；若以后清空 `~/.dsh/speech-to-text`，需在桌面版插件管理页重新“下载并准备”。
+4. **可选清理**：确认稳定后删除 `D:\AI_Code\小智机器人\GPT-SoVITS-new-py312`（14 GB，Python 3.12 新装副本，无参考音）。
 
-说明：ESP-IDF 已不再阻塞（§3 已完成）。
+说明：ESP-IDF（§3）与 GPT-SoVITS（§2）均已不再阻塞。
 
 ## 7. 安全记录
 

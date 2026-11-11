@@ -107,7 +107,7 @@ DSH (Electron 宿主)
 | 插件 | `D:\dsh-feiyu`（remote `https://github.com/baishuyue/dsh-feiyu.git`） |
 | DSH 宿主 | `D:\新建文件夹 (7)\resources\app\dsh\`（当前 checkout，只用于看宿主实现） |
 | LLM | `https://maas.qianwenaiapi.com/compatible-mode/v1` / `deepseek-v4.1-flash-1017`（备用 deepseek-chat） |
-| 语音 | GPT-SoVITS `:9880`，音色 `bingjiao2`（**不要动** `D:\GPT-SoVITS`、`D:\rvc`） |
+| 语音 | GPT-SoVITS `:9880`，音色 `bingjiao2`（**不要动** `D:\AI_Code\小智机器人\GPT-SoVITS`、`D:\rvc`） |
 | ffmpeg | `D:\rvc\bin\ffmpeg.exe` |
 | 端口 | qq-server `:8080`（`/health`）；napcat `:3000`；sovits `:9880` |
 | 原生模块 | better-sqlite3 是 ABI 137，本机 node 是 137 —— **对得上，但方案仍建议纯文本，先不引入 DB** |

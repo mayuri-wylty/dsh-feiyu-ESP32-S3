@@ -10,7 +10,7 @@ import { dataPath } from './paths.mjs'
 import * as rvc from './rvc.mjs'
 
 const SONGS_DIR = () => dataPath('songs')
-const FFMPEG = () => config().rvc?.ffmpeg || 'D:/GPT-SoVITS/runtime/ffmpeg.exe'
+const FFMPEG = () => config().rvc?.ffmpeg || 'D:/AI_Code/小智机器人/GPT-SoVITS/runtime/ffmpeg.exe'
 const PROXY = () => config().sing?.proxy || config().imageGen?.proxy || 'http://127.0.0.1:7897'
 
 function ffmpeg(args, timeoutMs = 300000) {

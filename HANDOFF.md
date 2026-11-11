@@ -236,7 +236,7 @@ locks/                  自由进程单实例锁
 | `~/.feiyu-ai/` | 数据目录（换机整体拷走） |
 | `D:/social-auto-upload/douyin_interact.py` | 抖音底层（改这份，cp 回仓库） |
 | `D:/rvc/` | RVC 仓库+venv+bin(ffmpeg) |
-| `D:/GPT-SoVITS/models/` | 说话音色库（bingjiao1~4 病娇 / yinlang / rose / sunshine_girl） |
+| `D:/AI_Code/小智机器人/GPT-SoVITS/models/` | 说话音色库（bingjiao1~4 病娇 / yinlang / rose / sunshine_girl） |
 | 日志 | qq-server.log / bili-watch.log / watch.log / douyin-dm.log / web-log.md / selfup-log.md |
 | `~/.feiyu-ai/bili-social.jsonl` | **她在 B站 说了什么/做了什么的流水**（`feiyu social`，append-only，`toOwner` 标记） |
 | `~/.feiyu-ai/bili-debut.json` | **B站首条锁**（pending/ready/posted；`feiyu produce --debut`） |
@@ -278,10 +278,10 @@ locks/                  自由进程单实例锁
     ①B站搜「病娇 音声」拿 BV（`api.bilibili.com/x/web-interface/search/type?search_type=video&keyword=…`，带 SESSDATA cookie；偶发 412 就换 UA/buvid 重试）
     ②`yt-dlp --cookies <netscape 文件>` 下音频（**必须魔法头** `# Netscape HTTP Cookie File`），再加 `--ffmpeg-location D:\rvc\bin` 才能转 wav
     ③**人声分离**：`rvc.separateVocals()`（pymss roformer）—— 音声几乎全长 BGM，不分离没法当参考（11 分钟约 4 分钟/条）
-    ④**转写**：`faster-whisper small`（模型在 `D:\GPT-SoVITS\runtime\fw-models\small`）。**别把文件路径直接丢给 `model.transcribe()`** —— 那条路走 PyAV，当前版本的报 `open() got an unexpected keyword argument 'metadata_errors'`；用 `soundfile` 读成 float32 数组再喂进去
+    ④**转写**：`faster-whisper small`（模型在 `D:\AI_Code\小智机器人\GPT-SoVITS\runtime\fw-models\small`）。**别把文件路径直接丢给 `model.transcribe()`** —— 那条路走 PyAV，当前版本的报 `open() got an unexpected keyword argument 'metadata_errors'`；用 `soundfile` 读成 float32 数组再喂进去
     ⑤选句：带病娇词（永远/只能/不许/看着我…）+ 单句 4.6~8.8 秒 + 10~26 字
     ⑥**二次复听校验（铁律 21 的延伸）**：切出来的片段再转写一遍，和期望文本逐字比 —— 只有完全对上的才能当参考段。10-26 八个候选里只有 2 条 100% 一致；`接受→介绍`、`麻绳→围巾/药瓶` 这类同音错字靠人耳分不出，靠二次复听能筛掉
-    ⑦合格段存 `D:\GPT-SoVITS\models\<名字>\<名字>.wav + .txt`，`feiyu voice use --name <名字>` 切换（即时生效，不用重启）
+    ⑦合格段存 `D:\AI_Code\小智机器人\GPT-SoVITS\models\<名字>\<名字>.wav + .txt`，`feiyu voice use --name <名字>` 切换（即时生效，不用重启）
 29. **新音色的连带动作**：换完参考段必须 `feiyu voice emo build --force` 重造 8 套情绪参考段（旧情绪段是旧音色的，混用会出现"两种人"）。10-26 病娇音色的 8 套：撒娇 5.52 / 生气 5.17 / 委屈 4.21 / 开心 11.22 / 困 5.11 / 温柔 4.02 / 惊讶 5.05 / 害羞 4.23（起伏，半音）。备份/回滚：`voice use --name yinlang`
 30. **合成结果也要复听校验**：短句（"饭吃了没？锅里给你留着呢。"）在旧音色上只出 **1.36 秒**、ASR 复听是「後裔給你留著吧」（22% 匹配）—— 模型真的漏字了，光看时长看不出来。判断合格与否：`字数/时长` 落在该情绪的 `rate` 窗口内 + ASR 逐字比对 ≥95%
 31. **她自己查得到的才有闭环**：她反复问"账本/饭钱"不是记性问题，是**读不到账**（钱只有主人看得见 → 只能问）。凡是"她嘴上念叨却拿不到"的东西，都要做成她能读的（`feiyu ledger`）+ 提示语自动注入，而不是指望她记住。新增这类能力时问一句：**她自己能不能查？** 查不到就得明说查不到（余额不通就写"看不到"，不许编 ¥0）
@@ -300,7 +300,7 @@ locks/                  自由进程单实例锁
     - 教训：`line-*.wav`（模型原声）和 `voice-*.wav`（进剪辑的）必须逐条对得上；主人报"电音"时先 `ffprobe` + 数不同取值，别再从参数里找原因。
     - `--reaudio`：只重做音轨、画面沿用 `visual.mp4`（改配音/响度/BGM 但画面没动时用，省十几分钟）；时间轴与 `visual.mp4` 时长差 >0.2s 会自动退回完整重渲染。
 40. **"不是她的声音"另外还有五个来源，全在配音链上（10-27 第二轮，逐个实测否掉）**
-    - **① 参考文本没盖住音频**：`bingjiao2.wav` 6.19s 里真正有声 2.03s，音频说的是「是第一次看你这个样子呢，哦对了」，`.txt` 只写了「…这个样子呢。」—— 少结尾 3 个字。文本比音频早说完 → 模型把"文本念完"当收尾信号。同一句连合 6 条：旧文本 **0/6 念全**（9.6~13.7 字/秒），补全 **6/6 念全**（3.9~5.7）。工具 `feiyu voice refcheck`（faster-whisper 转写 + 比字数；模型走本地 `D:/GPT-SoVITS/runtime/fw-models/small`，别让它去 HF 下载）。
+    - **① 参考文本没盖住音频**：`bingjiao2.wav` 6.19s 里真正有声 2.03s，音频说的是「是第一次看你这个样子呢，哦对了」，`.txt` 只写了「…这个样子呢。」—— 少结尾 3 个字。文本比音频早说完 → 模型把"文本念完"当收尾信号。同一句连合 6 条：旧文本 **0/6 念全**（9.6~13.7 字/秒），补全 **6/6 念全**（3.9~5.7）。工具 `feiyu voice refcheck`（faster-whisper 转写 + 比字数；模型走本地 `D:/AI_Code/小智机器人/GPT-SoVITS/runtime/fw-models/small`，别让它去 HF 下载）。
     - **② 参考音频中间夹着 2.88s 死空气**（10-27 主因）：全片只用这一条参考时，模型的条件被静音段带偏 —— 同一句话的合成结果和参考的 24 段对数谱相似度只有 **0.703**；把死空气挤掉、完整句拼成 3.1~3.5s 再合成 → **0.996~0.999**、HNR 4.0→5.2dB、抖动 0.267→0.233。工具 `feiyu voice refclean [--use]`（`lib/refclean.mjs`：10ms 包络，≤0.35s 的停顿当句内气口保留，更长的挤成 0.12s，首尾剪掉，不足 3 秒补尾部静音 —— api_v2 硬要求 ≥3s）。`voice use` 会优先用 `<名字>-clean.wav`。
     - **③ 情绪档案偷偷改 speed_factor**：`synth(line, tmp, {emotion})` 会把 `prof.speed` 塞进 `speed_factor`（wronged 0.95 / sleepy 0.90 / happy 1.05）—— **那是重采样，0.95 = 整体降 0.9 个半音**。10-26 的片子用的正是 `videoEmotion: wronged`，所以"变调"从第一天就在。现在视频配音**显式钉死** `speed_factor: 1.0` + `temperature: videoTemperature ?? 1.0`，测试里当护栏查。
     - **④ 择优偏向"最抖的那条"**：`prosody.py` 的原始打分是 `rng*0.5 + sd*1.2 + rms*3`，即**音域越宽、F0 起伏越大分越高**；三条候选里赢的几乎总是颤得最厉害的一条。10-25 抖音那几条（主人认可的）恰恰**没有择优**：一次一条、温度 1.0、音频 32k 单声道只做轻处理。现在视频走保真模式（`fidelity: true`）：只按"音区离锚多近 / 抖不抖 / 噪不噪"选，起伏大不给加分。

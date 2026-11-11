@@ -72,10 +72,10 @@
 
 | 组件 | 版本 | 说明 |
 |---|---|---|
-| **GPT-SoVITS** | commit `b4570b8`（2026-10-19，API v2 语义流式切分） | `D:\GPT-SoVITS` |
+| **GPT-SoVITS** | commit `b4570b8`（2026-10-19，API v2 语义流式切分） | `D:\AI_Code\小智机器人\GPT-SoVITS` |
 | 关键依赖 | `numpy<2.0`、`librosa==0.10.2`、`pytorch-lightning>=2.4`、`gradio<5`、`ffmpeg-python` | 见 `requirements-tts.txt` |
 | API 服务 | `api_v2.py` → `http://127.0.0.1:9880/tts` | 插件启动时自动拉起 + 每 60s 探活 |
-| 零样本参考音 | `D:\GPT-SoVITS\models\yinlang\yinlang.wav`（+ `prompt_text`/`prompt_lang`） | 当前配置用的就是它 |
+| 零样本参考音 | `D:\AI_Code\小智机器人\GPT-SoVITS\models\yinlang\yinlang.wav`（+ `prompt_text`/`prompt_lang`） | 当前配置用的就是它 |
 | 训练权重（可选） | `models\sunshine_girl\{sunshine_girl.ckpt, .pth}` | 训练过的音色，换成 `sovits_path`/`gpt_path` |
 | 调用链 | `qq-server` 摇中语音 → `lib/tts.mjs` POST `/tts` → 得 wav → NapCat `record` 段发出 | 失败自动降级纯文字 |
 
@@ -103,7 +103,7 @@
 | **soundfile** | `0.14.0` | 读写 |
 | **praat-parselmouth** | `0.4.7` | F0 |
 | **yt-dlp** | `2026.10.21` | 取源歌 |
-| **ffmpeg** | `7.1-essentials_build-ghyan`（GPT-SoVITS 自带） | `D:\GPT-SoVITS\runtime\ffmpeg.exe` |
+| **ffmpeg** | `7.1-essentials_build-ghyan`（GPT-SoVITS 自带） | `D:\AI_Code\小智机器人\GPT-SoVITS\runtime\ffmpeg.exe` |
 | **ffprobe** | RVC 自带 | `D:\rvc\bin\ffprobe.exe` |
 | 她的音色模型 | `D:\rvc\RVC\assets\weights\feiyu-rose.pth`（+ `_e50/_e100/_e125/_e150` 各轮次） | v2 40k |
 | 底模 | `assets\pretrained_v2\{f0G40k,f0D40k,f0G48k,f0D48k}.pth` | RVC 预训练 |
@@ -141,7 +141,7 @@
 | 1. 策划 | DeepSeek `deepseek-chat` 出脚本/分镜 | `llm` |
 | 2. 配图 | 硅基 `Qwen-Image-Edit-2509`（锁她的形象）× N 张 | `imageGen` |
 | 3. 旁白 | GPT-SoVITS `/tts` 念旁白（她的音色） | `voice` |
-| 4. 成片 | **ffmpeg** 图片序列 + 音频 → mp4 | `D:\GPT-SoVITS\runtime\ffmpeg.exe` |
+| 4. 成片 | **ffmpeg** 图片序列 + 音频 → mp4 | `D:\AI_Code\小智机器人\GPT-SoVITS\runtime\ffmpeg.exe` |
 | 5. 落地 | `~/.feiyu-ai/douyin-posts/<日期-标题>/`（`img-*.jpg` + `narration.wav` + `video.mp4` + 文案） | — |
 | 6. 发布 | **她不能自己发** —— 成片等你在面板点发布 | 设计如此 |
 
@@ -251,9 +251,9 @@ npm test                                      # 9 套测试全过
 | `imageGen.model` | `Qwen/Qwen-Image-Edit-2509`（另有三段兜底：`imageGen.qwen.model` → Pollinations） | 锁形象生图 | 换成纯文生图会丢形象一致性 |
 | `imageGen.refImage` | `~/.feiyu-ai/sticker-ref.jpg` | 根本形象 | 换图 = 换她的长相 |
 | `voice.sovits_url` | `http://127.0.0.1:9880/tts` | 说话 | — |
-| `voice.ref_audio_path` | `D:/GPT-SoVITS/models/yinlang/yinlang.wav` | 零样本参考音 | 换音色 |
+| `voice.ref_audio_path` | `D:/AI_Code/小智机器人/GPT-SoVITS/models/yinlang/yinlang.wav` | 零样本参考音 | 换音色 |
 | `voice.prompt_text` | 参考音的原话 | GPT-SoVITS 需要 | 必须与参考音一致 |
-| `rvc.ffmpeg` | `D:/GPT-SoVITS/runtime/ffmpeg.exe` | 翻唱/视频合成 | 换成系统 ffmpeg 也行 |
+| `rvc.ffmpeg` | `D:/AI_Code/小智机器人/GPT-SoVITS/runtime/ffmpeg.exe` | 翻唱/视频合成 | 换成系统 ffmpeg 也行 |
 | `rvc.python` | `D:/rvc/venv/Scripts/python.exe` | RVC 推理 | — |
 | `web.proxy` | `http://127.0.0.1:7897` | 生图兜底/上网 | 国内直连会被墙（实测 HTTP 000） |
 
@@ -283,7 +283,7 @@ npm test                                      # 9 套测试全过
 
 | 目录 | 大小 | 说明 |
 |---|---|---|
-| `D:\GPT-SoVITS` | 数 GB | 含 runtime + 底模 |
+| `D:\AI_Code\小智机器人\GPT-SoVITS` | 数 GB | 含 runtime + 底模 |
 | `D:\rvc` | 数 GB | torch cu128 + 底模 + 她的 .pth |
 | `D:\social-auto-upload` | 数百 MB | patchright + venv |
 | `~/.feiyu-ai` | 数十 MB | 记忆 / 表情 / 日记 / 凭据 |

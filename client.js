@@ -781,8 +781,8 @@ textarea.fy-input{width:100%;min-height:136px;resize:vertical;line-height:1.65;f
 				h(Card, {
 					title: "音色",
 					hint: voices.length
-						? "音色来自 D:/GPT-SoVITS/models/<名字>/（.wav 参考音频 + .txt 参考文本）；换完重启 DSH 完全生效。"
-						: "没扫到音色模型：把 GPT-SoVITS 音色放进 D:/GPT-SoVITS/models/<名字>/（含 .wav + .txt）。",
+						? "音色来自 D:/AI_Code/小智机器人/GPT-SoVITS/models/<名字>/（.wav 参考音频 + .txt 参考文本）；换完重启 DSH 完全生效。"
+						: "没扫到音色模型：把 GPT-SoVITS 音色放进 D:/AI_Code/小智机器人/GPT-SoVITS/models/<名字>/（含 .wav + .txt）。",
 				},
 					h(Row, { label: "当前音色" },
 						h("select", {

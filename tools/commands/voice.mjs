@@ -15,7 +15,7 @@ import { synth } from '../lib/tts.mjs'
 import { compactRef } from '../lib/refclean.mjs'
 import { dataPath, configPath } from '../lib/paths.mjs'
 
-const MODELS_DIR = 'D:/GPT-SoVITS/models'
+const MODELS_DIR = 'D:/AI_Code/小智机器人/GPT-SoVITS/models'
 const INTRO = '主人，这是我现在的声音，好听吗？我是大肥鱼，这条声音你觉得适合我就换上吧。'
 
 function arg(argv, name, d) { const i = argv.indexOf(name); return i >= 0 ? String(argv[i + 1] ?? d) : d }
@@ -183,14 +183,14 @@ export async function run(argv = []) {
     if (!file || !fs.existsSync(file)) { console.error('找不到参考音频：' + (file || '(未指定)')); process.exit(1) }
     const txtFile = arg(argv, '--text-file') || file.replace(/\.[^.]+$/, '.txt')
     const claimed = arg(argv, '--text') || (fs.existsSync(txtFile) ? fs.readFileSync(txtFile, 'utf8').trim() : '')
-    const py = arg(argv, '--python') || 'D:/GPT-SoVITS/.venv/Scripts/python.exe'
+    const py = arg(argv, '--python') || 'D:/AI_Code/小智机器人/GPT-SoVITS/.venv/Scripts/python.exe'
     const count = (s) => (String(s).match(/[\u4e00-\u9fa5A-Za-z0-9]/g) || []).length
     console.log(`参考音频：${file}`)
     console.log(`参考文本：${claimed || '(无)'}${claimed ? `（${count(claimed)} 字）` : ''}`)
     const code = [
       'import json, sys, os',
       // 模型优先用本地目录（faster-whisper 传名字会去 HF 下载，代理没开就直接崩）
-      `MP = ${JSON.stringify(fs.existsSync('D:/GPT-SoVITS/runtime/fw-models/small') ? 'D:/GPT-SoVITS/runtime/fw-models/small' : 'small')}`,
+      `MP = ${JSON.stringify(fs.existsSync('D:/AI_Code/小智机器人/GPT-SoVITS/runtime/fw-models/small') ? 'D:/AI_Code/小智机器人/GPT-SoVITS/runtime/fw-models/small' : 'small')}`,
       'if os.environ.get("HTTPS_PROXY") and not os.environ.get("FEIYU_ASR_PROXY_OK"):',
       '    os.environ.pop("HTTPS_PROXY", None); os.environ.pop("HTTP_PROXY", None)',
       'import soundfile as sf, librosa',
@@ -215,7 +215,7 @@ export async function run(argv = []) {
       heard = String(j.text || '')
       dur = Number(j.dur) || 0
     } catch (e) {
-      console.error('✗ ASR 跑不起来（需要 D:/GPT-SoVITS/.venv 里有 faster-whisper）：' + String(e.message).slice(0, 120))
+      console.error('✗ ASR 跑不起来（需要 D:/AI_Code/小智机器人/GPT-SoVITS/.venv 里有 faster-whisper）：' + String(e.message).slice(0, 120))
       process.exit(1)
     }
     console.log(`转写结果：${heard}（${count(heard)} 字，音频 ${dur}s）`)

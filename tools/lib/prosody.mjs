@@ -16,7 +16,7 @@ const SCRIPT = path.join(HERE, 'prosody.py')
 /** 分析用的 python（要装 librosa）。默认用 GPT-SoVITS 的解释器 —— 那边一定有。 */
 export function pythonPath() {
   const v = config().voice ?? {}
-  return v.python || process.env.FEIYU_TTS_PYTHON || 'D:/GPT-SoVITS/.venv/Scripts/python.exe'
+  return v.python || process.env.FEIYU_TTS_PYTHON || 'D:/AI_Code/小智机器人/GPT-SoVITS/.venv/Scripts/python.exe'
 }
 
 /**

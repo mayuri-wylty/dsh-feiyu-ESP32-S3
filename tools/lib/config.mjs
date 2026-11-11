@@ -90,7 +90,7 @@ export const DEFAULTS = {
   rvc: {
     root: 'D:/rvc/RVC',
     python: 'D:/rvc/venv/Scripts/python.exe',
-    ffmpeg: 'D:/GPT-SoVITS/runtime/ffmpeg.exe',
+    ffmpeg: 'D:/AI_Code/小智机器人/GPT-SoVITS/runtime/ffmpeg.exe',
   },
   sing: {
     search: true,            // QQ 点唱没学会的歌时，自动搜源歌学（yt-dlp 走代理）
@@ -206,8 +206,8 @@ export const DEFAULTS = {
     streaming_mode: false,
     // 语音服务（GPT-SoVITS）随 DSH 自动拉起，避免"有开关没声音"
     autoStartSovits: true,
-    sovitsCmd: 'D:/GPT-SoVITS/.venv/Scripts/python.exe',
-    sovitsScript: 'D:/GPT-SoVITS/api_v2.py',
+    sovitsCmd: 'D:/AI_Code/小智机器人/GPT-SoVITS/.venv/Scripts/python.exe',
+    sovitsScript: 'D:/AI_Code/小智机器人/GPT-SoVITS/api_v2.py',
     // ---- 情绪三层（10-26：主人说"语音只有略微的语气变化，没有人类情感"）----
     // L0 参数 + 择优
     text_split_method: 'cut0',   // 不按标点切碎，保留跨句韵律（实测起伏 3.96 → 4.43）

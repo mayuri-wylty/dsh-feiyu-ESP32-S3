@@ -482,7 +482,7 @@ delta < 6h  → 立即执行 + 说明"晚了 X 小时"（不装作准时）
 6. **不让同一意图有第二个 owner**——lease + fencing。
 7. **不许"绝对不许说不知道"**——那是逼她编。
 8. **不复活旧方向**：Blender / 3D / 2.5D / `videogen.mjs` / `cutout` / `edit` / `sfx` / `film.mjs`。
-9. **不动两处大资产**：`D:\GPT-SoVITS`（12.47GB）、`D:\rvc`（13.04GB）。
+9. **不动两处大资产**：`D:\AI_Code\小智机器人\GPT-SoVITS`（12.47GB）、`D:\rvc`（13.04GB）。
 
 ---
 
