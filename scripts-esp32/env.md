@@ -186,7 +186,7 @@ profile `package.json` 关键内容：
 
 | 检查 | 结果 |
 | --- | --- |
-| `D:\AI_Code\小智机器人\GPT-SoVITS` | **存在**（21 GB；由旧 `D:\GPT-SoVITS` 整体迁移而来，新装副本暂存为 `GPT-SoVITS-new-py312`） |
+| `D:\AI_Code\小智机器人\GPT-SoVITS` | **存在**（20.8 GB；由旧 `D:\GPT-SoVITS` 整体迁移而来；新装副本已于 2026-11-11 删除） |
 | `.venv\Scripts\python.exe` | **可用**：Python 3.10.11，torch 2.7.1+cu128，`torch.cuda.is_available()=True` |
 | 参考音 | **存在**：`models\feiyu\feiyu.wav`（302,126 B）+ `feiyu.txt` |
 | `127.0.0.1:9880` 监听 | **有**（uvicorn） |
@@ -200,13 +200,13 @@ profile `package.json` 关键内容：
 
 2026-11-10 首轮探测曾判定 BLOCKED-USER（当时本机没有安装）。2026-11-11 已完成安装与迁移：
 
-1. 旧的 `D:\GPT-SoVITS`（21 GB，含工作 venv 与参考音）整体移动到 `D:\AI_Code\小智机器人\GPT-SoVITS`；新装副本先改名为 `GPT-SoVITS-new-py312`（14 GB，Python 3.12，**不含 `models/`**）暂存。
+1. 旧的 `D:\GPT-SoVITS`（21 GB，含工作 venv 与参考音）整体移动到 `D:\AI_Code\小智机器人\GPT-SoVITS`；新装副本先改名为 `GPT-SoVITS-new-py312`（Python 3.12，**不含 `models/`**）暂存，确认旧安装可用后已于 2026-11-11 删除（回收 13.28 GB，D: 剩余 383.90 GB）。
 2. venv 内 7 个含旧绝对路径的文件已修正，插件内 23 个文件共 64 处硬编码路径同步更新（`git diff --stat` 可查），`npm test` 309/309 通过。
 3. 启动方式不变：`pwsh -File .\start-sovits.ps1`，等价于在根目录执行
    `.venv\Scripts\python.exe api_v2.py -a 127.0.0.1 -p 9880 -c GPT_SoVITS/configs/tts_infer.yaml`（`tts_infer.yaml` 内全部为相对路径，cwd 必须是仓库根）。
 4. **通过标准（已达成）**：`/docs` 返回 200；`/tts` 返回有效 WAV（RIFF/WAVE，> 2 KB）；`streaming_mode:2` 为 44 字节头 + 裸 PCM。
 
-> 注：`GPT-SoVITS-new-py312` 只是备份，确认稳定后可删除以回收 14 GB。
+> 注：`GPT-SoVITS-new-py312` 已于 2026-11-11 删除；当前仅保留 `D:\AI_Code\小智机器人\GPT-SoVITS` 一份安装。
 
 ## 3. ESP-IDF（要求 ≥ v6.0.1）
 
@@ -343,7 +343,7 @@ pwsh -File .\probe.ps1 -RefAudio 'D:\AI_Code\小智机器人\GPT-SoVITS\models\y
 1. ~~**GPT-SoVITS 未安装**~~ → **已完成（2026-11-11）**：安装/迁移完毕，参考音就位，`:9880` 合成实测通过（§2.2）。
 2. **DSH API 外部调用**：桌面版使用动态端口 + per-process token，外部 agent 无法直接调用 `/dsh-feiyu/api/*`。如果后续任务需要自动调用，需另行设计受控入口（不要提取/落盘 token）。
 3. **voice-input**：当前已启用且模型已缓存，无需人工操作；若以后清空 `~/.dsh/speech-to-text`，需在桌面版插件管理页重新“下载并准备”。
-4. **可选清理**：确认稳定后删除 `D:\AI_Code\小智机器人\GPT-SoVITS-new-py312`（14 GB，Python 3.12 新装副本，无参考音）。
+4. ~~**可选清理**~~ → **已完成（2026-11-11）**：`D:\AI_Code\小智机器人\GPT-SoVITS-new-py312` 已删除，回收 13.28 GB。
 
 说明：ESP-IDF（§3）与 GPT-SoVITS（§2）均已不再阻塞。
 
