@@ -75,7 +75,7 @@ globalThis.document = {
 const ESP32_STATUS = {
   ok: true, enabled: true, running: true,
   address: { address: '192.168.1.20', port: 8765 }, publicHost: '192.168.1.20',
-  otaUrl: 'http://192.168.1.20:8765/xiaozhi/ota/', token: 'tok', asrAvailable: true,
+  otaUrl: 'http://192.168.1.20:8765/xiaozhi/ota/', tokenSet: true, asrAvailable: true,
   devices: [{ deviceId: 'aa:bb:cc', sessionId: 's1', state: 'listening', lastSeenAt: Date.now() }],
   lastError: null,
 }
@@ -161,7 +161,7 @@ for (const must of ['小智 ESP32 通道', 'OTA URL', '在线设备', '最近对
 assert.equal(collect(esp32Card, (n) => n.props.className === 'fy-dev-list').length, 1, '设备列表容器应存在')
 assert.ok(esp32Text.includes('aa:bb:cc'), '设备列表应渲染 deviceId')
 assert.ok(esp32Text.includes('http://192.168.1.20:8765/xiaozhi/ota/'), 'OTA URL 应渲染')
-// token 明文绝不出现
+// token 明文绝不出现（状态接口只给 tokenSet 布尔值）
 assert.ok(!esp32Text.includes('"tok"') && !esp32Text.includes('>tok<'), 'ESP32 卡片不应包含 token 明文')
 
 // —— 包清单契约：dsh-client-modules 只认 exports["./client"] + dsh.client ——

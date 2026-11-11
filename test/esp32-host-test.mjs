@@ -249,7 +249,7 @@ test('stop 会关闭已注册设备', async () => {
 })
 
 // ── 6. status 字段形状 + asrAvailable 真假两例 ──────────────────────────────
-test('status 字段形状：otaUrl / token / asrAvailable', async () => {
+test('status 字段形状：otaUrl / tokenSet / asrAvailable', async () => {
   const { factory } = makeFakeGateway({ port: 8765, publicHost: '' })
   const host = createEsp32Host({
     getConfig: makeConfig({ port: 8765 }),
@@ -259,13 +259,36 @@ test('status 字段形状：otaUrl / token / asrAvailable', async () => {
   })
   await host.start()
   const status = host.status()
-  for (const key of ['ok', 'enabled', 'running', 'address', 'publicHost', 'otaUrl', 'token', 'asrAvailable', 'devices', 'lastError']) {
+  for (const key of ['ok', 'enabled', 'running', 'address', 'publicHost', 'otaUrl', 'tokenSet', 'asrAvailable', 'devices', 'lastError']) {
     assert.ok(key in status, `status 缺少字段 ${key}`)
   }
-  assert.equal(status.token, TOKEN)
+  assert.equal(status.tokenSet, true)
+  // 安全：状态接口不得回传明文 token
+  assert.equal('token' in status, false, 'status 不得包含明文 token 字段')
+  assert.equal(JSON.stringify(status).includes(TOKEN), false, 'status 序列化后不得出现 token 明文')
   assert.equal(status.asrAvailable, false)
   // publicHost 为空时 OTA 回落到 127.0.0.1
   assert.equal(status.otaUrl, 'http://127.0.0.1:8765/xiaozhi/ota/')
+  await host.stop()
+})
+
+test('status 只读：查询状态不刷新 lastSeenAt', async () => {
+  let clock = 1000
+  const { factory, state } = makeFakeGateway()
+  const host = createEsp32Host({
+    getConfig: makeConfig(),
+    createGateway: factory,
+    createSession: makeFakeSessionFactory().factory,
+    now: () => clock,
+  })
+  await host.start()
+  state.createSession({
+    deviceId: 'dev-1', sessionId: 'sess-1',
+    sendJson: () => true, sendBinary: () => true, close: () => {},
+  })
+  const first = host.status().devices[0].lastSeenAt
+  clock = 60_000
+  assert.equal(host.status().devices[0].lastSeenAt, first, '轮询状态不得伪装成设备活跃')
   await host.stop()
 })
 

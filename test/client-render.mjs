@@ -49,7 +49,7 @@ const RESPONSES = {
     address: { address: '192.168.1.20', family: 'IPv4', port: 8765 },
     publicHost: '192.168.1.20',
     otaUrl: 'http://192.168.1.20:8765/xiaozhi/ota/',
-    token: 'secret-token-xyz',
+    tokenSet: true,
     asrAvailable: true,
     devices: [{
       deviceId: 'aa:bb:cc', clientId: 'c1', sessionId: 's1', state: 'listening',
@@ -210,13 +210,14 @@ for (const must of ['192.168.1.20:8765', 'http://192.168.1.20:8765/xiaozhi/ota/'
 }
 assert.ok(text.includes('ECONNREFUSED'), 'lastError 应展示出来')
 assert.ok(text.includes('1400ms'), '耗时指标应展示 totalMs')
-assert.ok(!text.includes('secret-token-xyz'), 'token 明文绝不能渲染进 DOM')
+assert.ok(!text.includes('secret-token-xyz'), '状态里即使混进 token 明文也不能渲染进 DOM')
+assert.ok(!/"token"\s*:/.test(JSON.stringify(tree)), '渲染树不得携带 token 字段')
 assert.ok(fetchCalls.some((u) => u.startsWith('/dsh-feiyu/api/esp32/log?device=')), '没有请求 esp32/log')
 
 // ── ESP32 卡片空状态：未启用 + 无设备，不能崩 ───────────────────────────────
 RESPONSES['/dsh-feiyu/api/esp32/status'] = {
   ok: true, enabled: false, running: false, address: null, publicHost: null,
-  otaUrl: 'http://127.0.0.1:8765/xiaozhi/ota/', token: '', asrAvailable: false,
+  otaUrl: 'http://127.0.0.1:8765/xiaozhi/ota/', tokenSet: false, asrAvailable: false,
   devices: [], lastError: null,
 }
 state.length = 0

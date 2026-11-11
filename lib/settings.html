@@ -388,7 +388,7 @@ async function loadEsp32() {
       + ' · ASR' + (st.asrAvailable ? '可用' : '不可用') + ' · 在线设备 ' + ((st.devices || []).length);
     $('esp32_addr').textContent = host ? host + (port != null ? ':' + port : '') : '—';
     $('esp32_ota').textContent = st.otaUrl || '—';
-    $('esp32_token').textContent = st.token ? '已配置' : '未配置';
+    $('esp32_token').textContent = st.tokenSet ? '已配置' : '未配置';
     $('esp32_asr').textContent = st.asrAvailable ? '可用' : '不可用';
     if (!st.enabled) {
       noticeEl.textContent = 'ESP32 通道未启用：把 feiyu.config.json 里 esp32.enabled 设为 true 后重启 DSH。';

@@ -275,7 +275,7 @@ textarea.fy-input{width:100%;min-height:136px;resize:vertical;line-height:1.65;f
 			const addr = (st && st.address) || null;
 			const port = addr && addr.port != null ? addr.port : (st && st.port);
 			const host = (st && st.publicHost) || (addr && addr.address) || "";
-			const tokenSet = !!(st && st.token);
+			const tokenSet = !!(st && st.tokenSet);
 			const lastError = st && st.lastError;
 			// 最近一条带 latency 的日志行（T22 管线写入 meta.latency）
 			let latency = null;
