@@ -352,3 +352,39 @@ test('factory：依赖按配置签名缓存，配置不变复用同一实例', (
   assert.equal(typeof a.drain, 'function')
   assert.equal(typeof b.drain, 'function')
 })
+
+// ── 5. T5：ASR 与 voice-input 解耦 / 签名 / 健康 ────────────────────────────
+
+const CLOUD_ASR = { primary: 'openai-compatible', openai: { baseUrl: 'http://127.0.0.1:1/v1', apiKey: 'test-key', model: 'm' } }
+
+test('factory：云 ASR 为主、无 stt → 仍建 ASR 管线（不降级回声）', () => {
+  const logger = makeLogger()
+  const { createPipeline } = makeFactory({ esp32: { pipeline: 'asr', asr: CLOUD_ASR }, stt: null, logger })
+  const pipeline = createPipeline(makeCtx())
+  assert.equal(typeof pipeline.stats, 'object')
+  assert.ok(!logger.warns.some((w) => w.message.includes('ASR 不可用')))
+})
+
+test('factory：改 apiKey 触发 provider 重建（签名含 asr/tts 全量配置）', () => {
+  let cfg = { pipeline: 'asr', asr: CLOUD_ASR }
+  const logger = makeLogger()
+  const createPipeline = createEsp32PipelineFactory({ getConfig: () => ({ esp32: cfg }), getSpeechToText: () => null, logger })
+  createPipeline(makeCtx())
+  const h1 = JSON.stringify(createPipeline.getPipelineHealth())
+  assert.ok(!h1.includes('test-key'))
+  // 同配置：缓存命中，健康不变
+  assert.equal(JSON.stringify(createPipeline.getPipelineHealth()), h1)
+  cfg = { pipeline: 'asr', asr: { ...CLOUD_ASR, openai: { ...CLOUD_ASR.openai, baseUrl: '' } } }
+  const h2 = createPipeline.getPipelineHealth()
+  assert.equal(h2.asr.ready, false, '改配置后应重建并暴露构造错误')
+  assert.ok(h2.degraded && h2.reason.includes('ASR'))
+})
+
+test('getPipelineHealth：sensevoice 缺 stt → asr 不可用；有 stt → ready', () => {
+  const a = makeFactory({ esp32: {}, stt: null }).createPipeline.getPipelineHealth()
+  assert.equal(a.asr.ready, false)
+  assert.equal(a.degraded, true)
+  const b = makeFactory({ esp32: {}, stt: makeFakeStt() }).createPipeline.getPipelineHealth()
+  assert.equal(b.asr.ready, true)
+  assert.equal(b.asr.primary, 'sensevoice')
+})
