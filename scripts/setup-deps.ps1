@@ -6,7 +6,8 @@
     三块环境（全部串行执行，不并发，内存占用小）：
       1. 抖音（douyin）  -> deps\douyin\{.venv,browsers}   patchright + 本地 Chromium
       2. 微信（wechat）  -> deps\wechat\.venv                wechatauto-replica
-      3. QQ 网关 NapCat  -> deps\napcat\                      Node 版 NapCat Shell v4.18.42
+      3. QQ 网关 NapCat  -> deps\napcat\                      Node 版 NapCat Shell v4.18.42（注入式，QQ 9.9.36 下核心起不来，仅作 DLL 来源）
+         QQ 网关（现行）-> deps\napcat-old\                 独立版 NapCat v4.18.19（自带 QQ 运行库，不注入本机 QQ，无需管理员）
 
     另外：
       - 建立 D:\NapCat 目录联接（junction）指向 deps\napcat\napcat，
@@ -62,6 +63,17 @@ $NapCatZip     = Join-Path $Cache 'NapCat.Shell.Windows.Node.zip'
 $NapCatDir     = Join-Path $Deps 'napcat'
 $NapCatSub     = Join-Path $NapCatDir 'napcat'
 $Junction      = 'D:\NapCat'
+
+# 独立版 NapCat 4.18.19：自带 QQ 9.9.32 运行库，node.exe index.js 直接跑，不注入本机 QQ。
+$SaVersion = '4.18.19'
+$SaUrls    = @(
+    "https://github.com/mayuri-wylty/dsh-feiyu-ESP32-S3/releases/download/deps-napcat-v$SaVersion/NapCat.Shell.Windows.Node.zip",
+    "https://github.com/XingYunStar/NapCatQQ/releases/download/v$SaVersion/NapCat.Shell.Windows.Node.zip"
+)
+$SaSha256  = 'a08e7bebe49f656807f198bbf3a5d3f2fd6f840499728d665285323db4342d77'
+$SaZip     = Join-Path $Cache 'NapCat-standalone-4.18.19.zip'
+$SaDir     = Join-Path $Deps 'napcat-old'
+$SaJunction = 'D:\NapCatOld'
 
 # 配置里写入的 napcat_launcher（Install-NapCat 会按联接是否可用改写）
 $script:NapCatLauncher = 'D:/NapCat/start-qq-gateway.bat'
@@ -297,6 +309,72 @@ function Install-NapCat {
     Initialize-NapCatJunction
 }
 
+function Install-NapCatStandalone {
+    Write-Step "NapCat v$SaVersion 独立版 (QQ 网关，现行方案)"
+    $node = Join-Path $SaDir 'node.exe'
+    if ((Test-Path -LiteralPath $node) -and -not $Force) {
+        Write-Skip "已解压：$SaDir"
+    } else {
+        if ($Force -and (Test-Path -LiteralPath $SaZip)) { Remove-Item -LiteralPath $SaZip -Force }
+        if (-not (Test-Path -LiteralPath $SaZip)) {
+            if (-not (Test-Cmd 'curl.exe')) { throw '缺少 curl.exe，无法下载 NapCat。' }
+            $done = $false
+            foreach ($url in $SaUrls) {
+                Write-Host "    downloading $url"
+                $code = Invoke-Native -Exe 'curl.exe' -Show -Arguments @(
+                    '-4', '--tlsv1.2', '-L', '-C', '-', '--retry', '5', '--retry-all-errors', '-sS', '-o', $SaZip, $url)
+                if ($code -eq 0 -and (Test-Path -LiteralPath $SaZip) -and (Get-Sha256 $SaZip) -eq $SaSha256) { $done = $true; break }
+                Write-Warn "该来源失败或校验不符（curl 退出码 $code），换下一个"
+                if (Test-Path -LiteralPath $SaZip) { Remove-Item -LiteralPath $SaZip -Force }
+            }
+            if (-not $done) { throw "独立版 NapCat 所有下载源均失败：$($SaUrls -join ' ; ')" }
+        }
+        $actual = Get-Sha256 $SaZip
+        if ($actual -ne $SaSha256) { throw "独立版 NapCat SHA256 不符（期望 $SaSha256，实际 $actual），已中止。" }
+        Write-Host "    extracting -> $SaDir"
+        Expand-ZipGuarded -ZipPath $SaZip -DestPath $SaDir -KeepExisting @('napcat/config/')
+        if (-not (Test-Path -LiteralPath $node)) { throw "解压后仍未找到 $node" }
+        Write-Ok "已解压：$SaDir"
+    }
+
+    # 补丁 1：该包缺 x64 的 crypto.dll / ssl.dll，借用 deps\napcat（4.18.42 包）里的同名文件
+    foreach ($dll in 'crypto.dll', 'ssl.dll') {
+        $dst = Join-Path $SaDir $dll
+        $src = Join-Path $NapCatDir $dll
+        if (Test-Path -LiteralPath $dst) { continue }
+        if (-not (Test-Path -LiteralPath $src)) { throw "缺少 $dll：需要先安装 deps\napcat（不要加 -SkipNapCat）" }
+        Copy-Item -LiteralPath $src -Destination $dst
+        Write-Ok "补齐 $dll"
+    }
+
+    # 补丁 2：worker 带 --no-sandbox 是给 Electron 用的，普通 node.exe 不认，直接删掉
+    $mjs = Join-Path $SaDir 'napcat\napcat.mjs'
+    $needle = '...Hu ? {} : { execArgv: ["--no-sandbox"] }'
+    $text = [IO.File]::ReadAllText($mjs)
+    if ($text.Contains($needle)) {
+        [IO.File]::WriteAllText($mjs, $text.Replace($needle, '...{}'), (New-Object Text.UTF8Encoding($false)))
+        Write-Ok '已去掉 napcat.mjs 里的 --no-sandbox'
+    } else {
+        Write-Skip 'napcat.mjs 无需打补丁'
+    }
+
+    # 启动脚本（纯 ASCII，避免 cmd 代码页问题）
+    Copy-Item -LiteralPath (Join-Path $RepoRoot 'scripts\napcat\start-napcat-standalone.bat') -Destination (Join-Path $SaDir 'start-napcat-standalone.bat') -Force
+    Write-Ok '启动脚本已写入'
+
+    # ASCII 联接 D:\NapCatOld -> deps\napcat-old（仓库路径含中文，计划任务/批处理走联接更稳）
+    if (-not (Test-Path -LiteralPath 'D:\')) { Write-Warn 'D: 盘不存在，跳过 D:\NapCatOld 联接'; return }
+    $item = Get-Item -LiteralPath $SaJunction -Force -ErrorAction SilentlyContinue
+    if (-not $item) {
+        New-Item -ItemType Junction -Path $SaJunction -Target $SaDir | Out-Null
+        Write-Ok "联接已创建：$SaJunction -> $SaDir"
+    } elseif ($item.LinkType -eq 'Junction' -and (@($item.Target) | ForEach-Object { ([string]$_).TrimEnd('\') }) -contains $SaDir.TrimEnd('\')) {
+        Write-Skip "联接已存在：$SaJunction"
+    } else {
+        Write-Warn "$SaJunction 已存在且不是指向 $SaDir 的联接，未改动（启动脚本会回退到相对路径）"
+    }
+}
+
 # ---------------------------------------------------------------- 2. 抖音
 
 function Install-Douyin {
@@ -355,7 +433,7 @@ if (-not ($SkipDouyin -and $SkipWeChat)) {
     Write-Host "Python：$($script:Py.Exe) $($script:Py.PyArgs -join ' ')"
 }
 
-if (-not $SkipNapCat) { Install-NapCat }
+if (-not $SkipNapCat) { Install-NapCat; Install-NapCatStandalone }
 if (-not $SkipDouyin) { Install-Douyin }
 if (-not $SkipWeChat) { Install-WeChat }
 Merge-Config
@@ -364,5 +442,5 @@ Write-Host ''
 Write-Host '完成。仍需你手动完成（无法自动化）：' -ForegroundColor Yellow
 Write-Host '  * 抖音：首次运行 douyin_interact.py 扫码登录（cookie 存 ~/.feiyu-ai/douyin-cookies.json）'
 Write-Host '  * 微信：先在 PC 版微信客户端登录，再启动 wechat/wechat_bot.py'
-Write-Host '  * QQ：以管理员运行 start-qq-gateway.bat（路径见 ~/.dsh/feiyu.config.json 的 qq.napcat_launcher），扫码登录 QQ'
-Write-Host '  * QQ 二维码：<NapCat 目录>\cache\qrcode.png；OneBot HTTP 端口默认 3000，需在 NapCat WebUI 里启用'
+Write-Host '  * QQ：运行 scripts\napcat\start-napcat-standalone.bat（独立版，无需管理员），扫 deps\napcat-old\napcat\cache\qrcode.png 登录'
+Write-Host '  * QQ 首次登录后：在 deps\napcat-old\napcat\config\onebot11_<QQ号>.json 的 network.httpServers 启用 127.0.0.1:3000，并把 QQ 号写进 deps\napcat-old\qq-account.txt（之后快速登录）'
