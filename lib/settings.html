@@ -20,11 +20,11 @@
   }
   .row { display: flex; align-items: center; gap: 10px; margin: 8px 0; flex-wrap: wrap; }
   .row > label { min-width: 88px; color: #9aa4b2; font-size: 13px; }
-  input[type=text], input[type=number], select, textarea {
+  input[type=text], input[type=number], input[type=password], select, textarea {
     background: #12141a; border: 1px solid #313641; color: #e6e8ee;
     border-radius: 8px; padding: 7px 10px; font: inherit; min-width: 0;
   }
-  input[type=text], input[type=number] { width: 200px; }
+  input[type=text], input[type=number], input[type=password] { width: 200px; }
   select { width: 260px; }
   textarea { width: 100%; min-height: 120px; resize: vertical; line-height: 1.6; }
   input:focus, select:focus, textarea:focus { outline: none; border-color: #4a7dff; }
@@ -91,6 +91,19 @@
     <div class="row"><label>称呼</label><input type="text" id="owner_name" placeholder="B站昵称 / 她怎么叫你"></div>
     <div class="row"><label>微信 wxid</label><input type="text" id="owner_wechat" placeholder="（可选）主人微信 wxid"></div>
     <div class="hint">QQ 号填上后，她就能认出「这个人是我主人」，对网友则保持距离、不泄隐私</div>
+  </div>
+
+  <div class="card">
+    <h2>大脑（LLM）</h2>
+    <div class="row">
+      <label>API Key</label>
+      <input type="password" id="llm_key" placeholder="留空则保持不变" autocomplete="off" style="width:260px">
+      <span class="tag" id="llm_key_state">未配置</span>
+    </div>
+    <div class="row"><label>接口地址</label><input type="text" id="llm_base_url" placeholder="https://api.deepseek.com/v1" style="width:320px"></div>
+    <div class="row"><label>模型</label><input type="text" id="llm_model" placeholder="deepseek-chat"></div>
+    <div class="row"><button class="primary" id="save_llm">保存大脑配置</button></div>
+    <div class="hint">Key 只写入本机 feiyu.config.json，保存后不回显；环境变量 DEEPSEEK_API_KEY / LLM_API_KEY 优先于这里。改完下次对话生效。</div>
   </div>
 
   <div class="card">
@@ -258,7 +271,28 @@ function fillForm() {
     }
     $('voice_hint').textContent = '选中音色会自动写入参考音频 + 参考文本；换音色后重启 DSH 生效';
   }
+  const l = c.llm || {};
+  $('llm_base_url').value = l.base_url || '';
+  $('llm_model').value = l.model || '';
+  $('llm_key').value = '';
+  renderLlmKeyState(Boolean(l.hasKey));
   $('cfgpath').textContent = state.configPath || 'feiyu.config.json';
+}
+
+/** 组装 llm 补丁：留空的字段不写入（Key 留空 = 保持原 Key 不变）。 */
+function buildLlmPatch(vals) {
+  const patch = {};
+  const base = String(vals.base_url || '').trim();
+  const model = String(vals.model || '').trim();
+  const key = String(vals.api_key || '').trim();
+  if (base) patch.base_url = base;
+  if (model) patch.model = model;
+  if (key) patch.api_key = key;
+  return patch;
+}
+
+function renderLlmKeyState(hasKey) {
+  $('llm_key_state').textContent = hasKey ? '已配置（留空则保持不变）' : '未配置';
 }
 
 async function saveSection(patch, okMsg) {
@@ -312,6 +346,27 @@ function bind() {
   });
 
   $('refresh_mem').addEventListener('click', loadMemory);
+
+  $('save_llm').addEventListener('click', async () => {
+    const patch = buildLlmPatch({
+      base_url: $('llm_base_url').value,
+      model: $('llm_model').value,
+      api_key: $('llm_key').value,
+    });
+    if (!Object.keys(patch).length) return toast('没有要保存的改动（Key 留空表示保持不变）', true);
+    try {
+      await api('/config', { method: 'POST', body: JSON.stringify({ llm: patch }) });
+      const next = Object.assign({}, state.config.llm, patch);
+      if (patch.api_key) {
+        next.hasKey = true;
+        delete next.api_key;
+      }
+      state.config.llm = next;
+      $('llm_key').value = '';
+      renderLlmKeyState(Boolean(next.hasKey));
+      toast('大脑配置已保存（下次对话生效）');
+    } catch (e) { toast('保存失败：' + e.message, true); }
+  });
 }
 
 function saveNight() {
