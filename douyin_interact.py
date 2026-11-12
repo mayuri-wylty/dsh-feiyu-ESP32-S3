@@ -38,7 +38,18 @@ for _pk in ("http_proxy", "https_proxy", "HTTP_PROXY", "HTTPS_PROXY", "all_proxy
     os.environ.pop(_pk, None)
 
 # 复用 social-auto-upload 的本地 Chrome 配置
-LOCAL_CHROME_PATH = "C:/Program Files/Google/Chrome/Application/chrome.exe"
+def _find_chrome():
+    """优先级：环境变量 FEIYU_CHROME_PATH > 仓库 deps/douyin 下的 Chromium > 系统 Chrome。"""
+    env = os.environ.get("FEIYU_CHROME_PATH")
+    if env and Path(env).exists():
+        return env
+    deps = Path(__file__).resolve().parent / "deps" / "douyin" / "browsers"
+    for hit in sorted(deps.glob("chromium-*/chrome-win*/chrome.exe"), reverse=True):
+        return str(hit)
+    return "C:/Program Files/Google/Chrome/Application/chrome.exe"
+
+
+LOCAL_CHROME_PATH = _find_chrome()
 HOME = Path.home()
 DEFAULT_COOKIE = str(HOME / ".feiyu-ai" / "douyin-cookies.json")
 
@@ -48,7 +59,7 @@ FEED_URL = "https://www.douyin.com/"
 # CDP：连用户真实 Chrome（干净 profile + 调试端口），绕过抖音风控发评论
 CDP_PORT = 9222
 CDP_URL = f"http://127.0.0.1:{CDP_PORT}"
-CDP_PROFILE = "D:/social-auto-upload/chrome-profile"
+CDP_PROFILE = os.environ.get("FEIYU_CHROME_PROFILE") or str(Path(__file__).resolve().parent / "deps" / "douyin" / "chrome-profile")
 
 
 def log(msg):

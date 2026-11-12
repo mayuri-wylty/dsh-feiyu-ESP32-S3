@@ -2,6 +2,9 @@
 node_modules/
 *.log
 
+# 本地依赖环境（Python venv / 浏览器 / NapCat 网关等，体积大且含平台二进制）
+deps/
+
 # 临时文件（建仓脚本等）
 .github-create-body.json
 

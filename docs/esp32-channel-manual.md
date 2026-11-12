@@ -224,6 +224,9 @@ python D:\AI_Code\小智机器人\dsh-feiyu\scripts-esp32\build-firmware.py
 | 固件源码 | `D:\esp32\xiaozhi-esp32` |
 | 构建、烧录与环境脚本 | `D:\AI_Code\小智机器人\dsh-feiyu\scripts-esp32` |
 | 串口与构建日志 | `scripts-esp32` 目录下（不纳入版本管理） |
+| 抖音 / 微信 / QQ 网关运行环境 | `deps\`（不入库）：`douyin\{.venv,browsers}`、`wechat\.venv`、`napcat\`；`deps\.cache` 存下载包与 pip 缓存 |
+| NapCat 固定入口 | `D:\NapCat`（junction → `deps\napcat\napcat`，满足上游写死的 `D:/NapCat/...`）；配置/缓存/二维码均在该目录下的 `config\`、`cache\` |
+| 一键安装/修复 | `powershell -ExecutionPolicy Bypass -File scripts\setup-deps.ps1`（幂等；锁定依赖见 `scripts\requirements\`） |
 
 ### 10.3 相关文档
 

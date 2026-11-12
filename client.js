@@ -26,7 +26,7 @@ window.__ModuleLoader__.load({
 		// ── 接口层 ────────────────────────────────────────────────────────────
 		const API = "/dsh-feiyu/api";
 
-		async function api(path, init) {
+		async function api(path, init, opts) {
 			const r = await fetch(API + path, Object.assign({
 				cache: "no-store",
 				credentials: "same-origin",
@@ -37,7 +37,7 @@ window.__ModuleLoader__.load({
 			try { data = text ? JSON.parse(text) : {}; } catch {
 				throw new Error(r.status + " 非 JSON 响应：" + text.slice(0, 120));
 			}
-			if (!r.ok || data.ok === false) {
+			if (!r.ok || (data.ok === false && !(opts && opts.allowNotOk))) {
 				const err = new Error(data.error
 					|| (Array.isArray(data.errors) && data.errors.length ? data.errors.join("；") : "")
 					|| ("HTTP " + r.status));   // 后端 /services 把原因放在 errors 数组，别吞成"HTTP 200"（10-25 实测坑）
@@ -790,7 +790,7 @@ textarea.fy-input{width:100%;min-height:136px;resize:vertical;line-height:1.65;f
 				setBusy("selftest");
 				setSelftest(null);
 				try {
-					const r = await api("/selftest", { method: "POST" });
+					const r = await api("/selftest", { method: "POST" }, { allowNotOk: true });   // 有红项时 ok=false 但 items 才是内容，不能当请求失败丢掉
 					setSelftest(r);
 					flash(r.ok ? "体检通过 ✓" : "体检有红项，看下面明细", !r.ok);
 				} catch (e) {
