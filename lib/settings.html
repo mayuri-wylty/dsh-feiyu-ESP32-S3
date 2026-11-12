@@ -72,6 +72,10 @@
   .bubble b { color: #7f8b9b; font-weight: 600; margin-right: 6px; }
   .bubble.user { background: #1b2740; }
   .bubble.assistant { background: #16301f; }
+  .prov-block { margin-top: 14px; padding-top: 10px; border-top: 1px dashed #262b34; }
+  .prov-block h3 { font-size: 13px; margin: 0 0 6px; color: #b9c1cd; }
+  .prov-res.ok { color: #6fcf97; }
+  .prov-res.bad { color: #e08a8a; }
 </style>
 </head>
 <body>
@@ -171,6 +175,10 @@
     <div class="row"><label>ASR</label><span id="esp32_asr">—</span></div>
     <div class="hint" id="esp32_notice" style="display:none"></div>
     <div class="hint" id="esp32_error" style="display:none;color:#e08a8a"></div>
+    <div class="row" style="margin-top:10px"><label>生效 provider</label><span id="esp32_pipeline" class="hint" style="margin:0">—</span></div>
+    <div class="hint" id="esp32_degraded" style="display:none;color:#e0b46a"></div>
+    <div id="esp32_asr_block" class="prov-block"></div>
+    <div id="esp32_tts_block" class="prov-block"></div>
     <div class="row" style="margin-top:10px"><label>在线设备</label></div>
     <div class="mem" id="esp32_devices"></div>
     <div class="row" style="margin-top:10px"><label>耗时</label><span id="esp32_latency" class="hint" style="margin:0">—</span></div>
@@ -516,6 +524,204 @@ function bindEsp32() {
   });
 }
 
+// ── ESP32 云端 ASR / TTS 配置（动态表单，来源 GET /esp32/providers）────────────
+const PROV_KIND_LABEL = { asr: '语音识别（ASR）', tts: '语音合成（TTS）' };
+const provState = { data: null, kinds: { asr: null, tts: null } };
+
+/** 取某 provider 已存的非密值（current.values[configKey]）。 */
+function provSavedValues(data, kind, meta) {
+  const cur = data && data.current && data.current[kind];
+  return Object.assign({}, (cur && cur.values && cur.values[meta.configKey]) || {});
+}
+
+/** 初始表单值：已存值优先，其次 registry 默认值；密钥字段永远为空（留空=保持不变）。 */
+function provInitForm(meta, saved) {
+  const out = {};
+  for (const f of meta.fields) {
+    if (f.secret) { out[f.key] = ''; continue; }
+    const v = saved[f.key];
+    out[f.key] = (v !== undefined && v !== null && v !== '') ? String(v) : (f.default !== undefined ? String(f.default) : '');
+  }
+  return out;
+}
+
+/** 组装 POST /esp32/providers/test 的 body：留空字段不带（后端用已存值），number 转数字。 */
+function buildProviderTestBody(kind, meta, form, persist) {
+  const values = {};
+  for (const f of meta.fields) {
+    const raw = String(form[f.key] == null ? '' : form[f.key]).trim();
+    if (raw === '') continue;
+    if (f.type === 'number') {
+      const n = Number(raw);
+      if (Number.isFinite(n)) values[f.key] = n;
+    } else values[f.key] = raw;
+  }
+  return { kind, id: meta.id, values, persist: Boolean(persist) };
+}
+
+/** 一句话描述测试结果。 */
+function describeTestResult(r) {
+  if (!r || r.ok !== true) return '测试失败：' + ((r && r.error) || '未知错误');
+  let t = '连接成功 · ' + r.ms + 'ms';
+  if (r.ttsFirstMs != null) t += ' · 首包 ' + r.ttsFirstMs + 'ms';
+  if (r.persisted) t += ' · 已启用为主（' + r.primary + '，兜底 ' + r.fallback + '）';
+  else if (r.persistError) t += ' · ' + r.persistError;
+  return t;
+}
+
+/** 管线健康 → 文案。 */
+function describePipeline(p) {
+  if (!p) return { text: '—', warn: '' };
+  const part = (k, label) => {
+    const h = p[k];
+    if (!h) return '';
+    return label + ' ' + (h.primary || '—') + (h.fallback ? '（兜底 ' + h.fallback + '）' : '') + (h.ready === false ? ' ✗' : '');
+  };
+  const text = [part('asr', 'ASR'), part('tts', 'TTS')].filter(Boolean).join(' · ') || '—';
+  const warn = p.degraded ? ('已降级：' + (p.reason || [p.asr && p.asr.error, p.tts && p.tts.error].filter(Boolean).join('；') || '原因未知')) : '';
+  return { text, warn };
+}
+
+function provBlockHtml(kind) {
+  return `<h3>${PROV_KIND_LABEL[kind]}</h3>
+    <div class="row"><label>服务商</label><select id="esp32_${kind}_provider"></select>
+      <select id="esp32_${kind}_preset" style="display:none"></select></div>
+    <div id="esp32_${kind}_fields"></div>
+    <div class="row">
+      <button class="primary" id="esp32_${kind}_test">测试连接</button>
+      <label class="sw" id="esp32_${kind}_autolabel" style="padding:4px 10px"><span style="font-size:12px">通过后自动启用为主</span>
+        <span class="toggle"><input type="checkbox" id="esp32_${kind}_auto" checked><i></i></span></label>
+      <button id="esp32_${kind}_save">仅保存</button>
+    </div>
+    <div class="hint prov-res" id="esp32_${kind}_result"></div>`;
+}
+
+function provRenderFields(kind) {
+  const ks = provState.kinds[kind];
+  const meta = ks.meta;
+  const box = $(`esp32_${kind}_fields`);
+  box.innerHTML = '';
+  if (!meta.fields.length) {
+    box.innerHTML = '<div class="hint">本地 provider，无需配置。</div>';
+  }
+  for (const f of meta.fields) {
+    const row = document.createElement('div');
+    row.className = 'row';
+    const type = f.type === 'password' ? 'password' : (f.type === 'number' ? 'number' : 'text');
+    const ph = f.secret ? (ks.hasKey ? '已保存，留空保持不变' : '') : (f.placeholder || '');
+    row.innerHTML = `<label>${escapeHtml(f.label)}${f.required ? ' *' : ''}</label>
+      <input type="${type}" id="esp32_${kind}_f_${f.key}" autocomplete="off" style="width:260px" placeholder="${escapeHtml(ph)}">
+      ${f.secret ? `<span class="tag">${ks.hasKey ? '已保存' : '未配置'}</span>` : ''}
+      ${f.hint ? `<span class="hint" style="margin:0">${escapeHtml(f.hint)}</span>` : ''}`;
+    box.appendChild(row);
+    const inp = row.querySelector('input');
+    inp.value = ks.form[f.key] || '';
+    inp.addEventListener('input', () => { ks.form[f.key] = inp.value; });
+  }
+}
+
+function provSelectProvider(kind, id) {
+  const data = provState.data;
+  const meta = data.providers.find(p => p.kind === kind && p.id === id);
+  const saved = provSavedValues(data, kind, meta);
+  const ks = provState.kinds[kind];
+  ks.meta = meta;
+  ks.hasKey = Boolean(saved.hasKey);
+  ks.form = provInitForm(meta, saved);
+  const presetSel = $(`esp32_${kind}_preset`);
+  presetSel.innerHTML = '';
+  if (meta.presets && meta.presets.length) {
+    presetSel.style.display = '';
+    presetSel.innerHTML = '<option value="">选择预设…</option>' + meta.presets.map(p => `<option value="${escapeHtml(p.id)}">${escapeHtml(p.label)}</option>`).join('');
+    if (saved.preset) presetSel.value = saved.preset;
+  } else presetSel.style.display = 'none';
+  $(`esp32_${kind}_test`).style.display = meta.testable ? '' : 'none';
+  $(`esp32_${kind}_autolabel`).style.display = meta.testable ? '' : 'none';
+  $(`esp32_${kind}_save`).style.display = meta.fields.length ? '' : 'none';
+  $(`esp32_${kind}_result`).textContent = '';
+  provRenderFields(kind);
+}
+
+function provApplyPreset(kind, presetId) {
+  const ks = provState.kinds[kind];
+  const preset = (ks.meta.presets || []).find(p => p.id === presetId);
+  if (!preset) return;
+  for (const [k, v] of Object.entries(preset.values)) ks.form[k] = String(v);
+  provRenderFields(kind);
+}
+
+function provRenderPipeline(pipeline) {
+  const d = describePipeline(pipeline);
+  $('esp32_pipeline').textContent = d.text;
+  const w = $('esp32_degraded');
+  w.textContent = d.warn;
+  w.style.display = d.warn ? '' : 'none';
+}
+
+async function loadEsp32Providers(keepResult) {
+  try {
+    const j = await apiRetry('/esp32/providers');
+    provState.data = j;
+    provRenderPipeline(j.pipeline);
+    for (const kind of ['asr', 'tts']) {
+      $(`esp32_${kind}_block`).innerHTML = provBlockHtml(kind);
+      provState.kinds[kind] = { meta: null, form: {}, hasKey: false };
+      const list = j.providers.filter(p => p.kind === kind);
+      const sel = $(`esp32_${kind}_provider`);
+      sel.innerHTML = list.map(p => `<option value="${escapeHtml(p.id)}">${escapeHtml(p.label)}${p.local ? '（本地）' : ''}</option>`).join('');
+      // 当前主是云 provider 就展示它，否则展示第一个云 provider，方便直接填写
+      const cur = j.current && j.current[kind];
+      const cloud = list.find(p => !p.local);
+      const primary = cur && list.find(p => p.id === cur.primary && !p.local);
+      const pick = primary ? primary.id : (cloud ? cloud.id : (list[0] && list[0].id));
+      sel.value = pick;
+      provSelectProvider(kind, pick);
+      sel.addEventListener('change', () => provSelectProvider(kind, sel.value));
+      $(`esp32_${kind}_preset`).addEventListener('change', (e) => provApplyPreset(kind, e.target.value));
+      $(`esp32_${kind}_test`).addEventListener('click', () => provTest(kind));
+      $(`esp32_${kind}_save`).addEventListener('click', () => provSave(kind));
+      if (keepResult && keepResult[kind]) {
+        $(`esp32_${kind}_result`).textContent = keepResult[kind].text;
+        $(`esp32_${kind}_result`).className = 'hint prov-res ' + keepResult[kind].cls;
+      }
+    }
+  } catch (e) {
+    $('esp32_pipeline').textContent = '读取失败：' + e.message;
+  }
+}
+
+async function provTest(kind) {
+  const ks = provState.kinds[kind];
+  const res = $(`esp32_${kind}_result`);
+  const btn = $(`esp32_${kind}_test`);
+  btn.disabled = true;
+  res.className = 'hint prov-res';
+  res.textContent = '测试中…';
+  try {
+    const body = buildProviderTestBody(kind, ks.meta, ks.form, $(`esp32_${kind}_auto`).checked);
+    const r = await api('/esp32/providers/test', { method: 'POST', body: JSON.stringify(body) }).catch(e => ({ ok: false, error: e.message }));
+    const text = describeTestResult(r);
+    const cls = r.ok ? 'ok' : 'bad';
+    res.textContent = text;
+    res.className = 'hint prov-res ' + cls;
+    if (r.ok && r.persisted) {
+      toast('已启用云端 ' + kind.toUpperCase() + ' 为主');
+      await loadEsp32Providers({ [kind]: { text, cls } });
+      loadEsp32();
+    }
+  } finally { btn.disabled = false; }
+}
+
+async function provSave(kind) {
+  const ks = provState.kinds[kind];
+  const body = buildProviderTestBody(kind, ks.meta, ks.form, false);
+  try {
+    await api('/config', { method: 'POST', body: JSON.stringify({ esp32: { [kind]: { [ks.meta.configKey]: body.values } } }) });
+    toast('已保存（未改变主选 provider）');
+    await loadEsp32Providers();
+  } catch (e) { toast('保存失败：' + e.message, true); }
+}
+
 async function boot() {
   try {
     const j = await api('/config');
@@ -527,6 +733,7 @@ async function boot() {
     bind();
     bindEsp32();
     loadEsp32();
+    loadEsp32Providers();
     const p = await api('/persona').catch(() => ({ text: '' }));
     $('persona').value = p.text || '';
     loadMemory();

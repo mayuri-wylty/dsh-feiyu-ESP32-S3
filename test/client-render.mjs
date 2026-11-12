@@ -284,4 +284,40 @@ for (const must of ['ESP32 通道未启用', '未配置', '通道未启用，暂
   assert.ok(emptyText.includes(must), 'ESP32 空状态缺少：' + must)
 }
 
+// ── ESP32 云端 ASR/TTS 配置块：有 providers 数据时动态渲染 ───────────────────
+const F = (key, label, type, extra = {}) => ({ key, label, type, required: false, secret: type === 'password', ...extra })
+RESPONSES['/dsh-feiyu/api/esp32/providers'] = {
+  ok: true,
+  providers: [
+    { kind: 'asr', id: 'sensevoice', label: '本地 SenseVoice', configKey: 'sensevoice', local: true, testable: false, fields: [], presets: [] },
+    { kind: 'asr', id: 'openai-compatible', label: 'OpenAI 兼容云 ASR', configKey: 'openai', local: false, testable: true,
+      fields: [F('baseUrl', 'Base URL', 'string'), F('apiKey', 'API Key', 'password', { required: true }), F('model', '模型', 'string')],
+      presets: [{ id: 'groq', label: 'Groq', values: { baseUrl: 'https://api.groq.com/openai/v1', model: 'whisper-large-v3-turbo' } }] },
+    { kind: 'tts', id: 'sovits-stream', label: '本地 GPT-SoVITS（流式）', configKey: 'sovits-stream', local: true, testable: false, fields: [], presets: [] },
+    { kind: 'tts', id: 'volcengine', label: '火山豆包语音 TTS（流式）', configKey: 'volcengine', local: false, testable: true,
+      fields: [F('apiKey', 'API Key', 'password', { required: true }), F('speaker', '音色', 'string', { hint: '2.0/1.0 音色需与资源 ID 匹配' })], presets: [] },
+  ],
+  current: {
+    asr: { primary: 'sensevoice', fallback: '', values: { openai: { baseUrl: 'https://x/v1', model: 'm', hasKey: true } } },
+    tts: { primary: 'sovits-stream', fallback: '', values: { volcengine: { speaker: 'zh_female', hasKey: false } } },
+  },
+  pipeline: { asr: { primary: 'openai-compatible', fallback: 'sensevoice', ready: false, error: 'boom' }, tts: { primary: 'volcengine', ready: true }, degraded: true, reason: 'ASR 云端不可用' },
+}
+state.length = 0
+effects.length = 0
+let provTree = null
+for (let pass = 0; pass < 12; pass++) {
+  hookIndex = 0
+  dirty = false
+  provTree = Component({ close: () => {} })
+  await flush()
+  await flush()
+  if (!dirty) break
+}
+const provText = allText(provTree)
+for (const must of ['语音识别（ASR）', '语音合成（TTS）', '测试连接', '仅保存', '通过后自动启用为主', '已保存，留空保持不变', 'Groq', '2.0/1.0 音色需与资源 ID 匹配', '已降级：ASR 云端不可用', 'https://x/v1']) {
+  assert.ok(provText.includes(must), 'ESP32 providers 块缺少：' + must)
+}
+assert.ok(!/"apiKey"\s*:/.test(JSON.stringify(provTree)), '渲染树不得携带 apiKey 字段')
+
 console.log('client-render ✓  渲染通过：9 个区块 · 4 个平台开关 · 大脑（LLM）卡片 · ESP32 卡片（正常态 + 空状态）· 请求', fetchCalls.length, '次')

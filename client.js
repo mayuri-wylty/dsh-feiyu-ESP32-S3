@@ -231,6 +231,167 @@ textarea.fy-input{width:100%;min-height:136px;resize:vertical;line-height:1.65;f
 			["ttsFirstMs", "TTS首帧"], ["totalMs", "总耗时"],
 		];
 
+		// ── ESP32 云端 ASR / TTS 配置（动态表单，来源 GET /esp32/providers；与 settings.html 行为一致）──
+		const PROV_KIND_LABEL = { asr: "语音识别（ASR）", tts: "语音合成（TTS）" };
+
+		function provInitForm(meta, saved) {
+			const out = {};
+			for (const f of meta.fields) {
+				if (f.secret) { out[f.key] = ""; continue; }
+				const v = saved && saved[f.key];
+				out[f.key] = (v !== undefined && v !== null && v !== "") ? String(v) : (f.default !== undefined ? String(f.default) : "");
+			}
+			return out;
+		}
+
+		function buildProviderTestBody(kind, meta, form, persist) {
+			const values = {};
+			for (const f of meta.fields) {
+				const raw = String(form[f.key] == null ? "" : form[f.key]).trim();
+				if (raw === "") continue;
+				if (f.type === "number") {
+					const n = Number(raw);
+					if (Number.isFinite(n)) values[f.key] = n;
+				} else values[f.key] = raw;
+			}
+			return { kind: kind, id: meta.id, values: values, persist: !!persist };
+		}
+
+		function describeTestResult(r) {
+			if (!r || r.ok !== true) return "测试失败：" + ((r && r.error) || "未知错误");
+			let t = "连接成功 · " + r.ms + "ms";
+			if (r.ttsFirstMs != null) t += " · 首包 " + r.ttsFirstMs + "ms";
+			if (r.persisted) t += " · 已启用为主（" + r.primary + "，兜底 " + r.fallback + "）";
+			else if (r.persistError) t += " · " + r.persistError;
+			return t;
+		}
+
+		function describePipeline(p) {
+			if (!p) return { text: "—", warn: "" };
+			const part = (k, label) => {
+				const x = p[k];
+				if (!x) return "";
+				return label + " " + (x.primary || "—") + (x.fallback ? "（兜底 " + x.fallback + "）" : "") + (x.ready === false ? " ✗" : "");
+			};
+			const text = [part("asr", "ASR"), part("tts", "TTS")].filter(Boolean).join(" · ") || "—";
+			const warn = p.degraded ? ("已降级：" + (p.reason || [p.asr && p.asr.error, p.tts && p.tts.error].filter(Boolean).join("；") || "原因未知")) : "";
+			return { text: text, warn: warn };
+		}
+
+		// 选中某 provider 后的 UI 状态（kind 级）
+		function provPick(data, kind, id) {
+			const meta = data.providers.find((p) => p.kind === kind && p.id === id);
+			const cur = data.current && data.current[kind];
+			const saved = Object.assign({}, (cur && cur.values && cur.values[meta.configKey]) || {});
+			return {
+				id: meta.id, form: provInitForm(meta, saved), hasKey: !!saved.hasKey,
+				preset: saved.preset || "", auto: true, res: null, busy: false,
+			};
+		}
+
+		function Esp32Providers(props) {
+			const [data, setData] = useState(null);
+			const [ui, setUi] = useState({});
+			const [err, setErr] = useState("");
+
+			const load = useCallback(async (keep) => {
+				try {
+					const j = await apiRetry("/esp32/providers");
+					setData(j);
+					const next = {};
+					for (const kind of ["asr", "tts"]) {
+						const list = j.providers.filter((p) => p.kind === kind);
+						const cur = j.current && j.current[kind];
+						const primary = cur && list.find((p) => p.id === cur.primary && !p.local);
+						const cloud = list.find((p) => !p.local);
+						const pick = primary ? primary.id : (cloud ? cloud.id : (list[0] && list[0].id));
+						if (pick) next[kind] = Object.assign(provPick(j, kind, pick), keep && keep[kind] ? { res: keep[kind] } : {});
+					}
+					setUi(next);
+					setErr("");
+				} catch (e) {
+					setErr(String((e && e.message) || e));
+				}
+			}, []);
+
+			useEffect(() => { load(); }, [load]);
+
+			const patchKind = (kind, p) => setUi((u) => Object.assign({}, u, { [kind]: Object.assign({}, u[kind], p) }));
+
+			const doTest = async (kind) => {
+				const s = ui[kind];
+				const meta = data.providers.find((p) => p.kind === kind && p.id === s.id);
+				patchKind(kind, { busy: true, res: null });
+				let r;
+				try {
+					r = await api("/esp32/providers/test", { method: "POST", body: JSON.stringify(buildProviderTestBody(kind, meta, s.form, s.auto)) });
+				} catch (e) { r = { ok: false, error: String((e && e.message) || e) }; }
+				const res = { ok: r.ok === true, text: describeTestResult(r) };
+				if (r.ok && r.persisted) { await load({ [kind]: res }); if (props.onChanged) props.onChanged(); }
+				else patchKind(kind, { busy: false, res: res });
+			};
+
+			const doSave = async (kind) => {
+				const s = ui[kind];
+				const meta = data.providers.find((p) => p.kind === kind && p.id === s.id);
+				const body = buildProviderTestBody(kind, meta, s.form, false);
+				patchKind(kind, { busy: true });
+				try {
+					await api("/config", { method: "POST", body: JSON.stringify({ esp32: { [kind]: { [meta.configKey]: body.values } } }) });
+					await load({ [kind]: { ok: true, text: "已保存（未改变主选 provider）" } });
+				} catch (e) { patchKind(kind, { busy: false, res: { ok: false, text: "保存失败：" + String((e && e.message) || e) } }); }
+			};
+
+			const renderKind = (kind) => {
+				const s = ui[kind];
+				if (!data || !s) return null;
+				const list = data.providers.filter((p) => p.kind === kind);
+				const meta = list.find((p) => p.id === s.id) || list[0];
+				return h("div", { key: kind, style: { marginTop: 12, paddingTop: 8, borderTop: "1px dashed var(--dsw-alias-border-l2,rgba(128,128,128,.25))" } },
+					h("div", { className: "fy-sub", style: { fontWeight: 600 } }, PROV_KIND_LABEL[kind]),
+					h(Row, { label: "服务商" },
+						h("select", {
+							className: "fy-input", value: s.id, "aria-label": kind + "-provider",
+							onChange: (e) => patchKind(kind, provPick(data, kind, e.target.value)),
+						}, list.map((p) => h("option", { key: p.id, value: p.id }, p.label + (p.local ? "（本地）" : "")))),
+						meta.presets && meta.presets.length
+							? h("select", {
+								className: "fy-input", value: s.preset, "aria-label": kind + "-preset",
+								onChange: (e) => {
+									const pr = meta.presets.find((x) => x.id === e.target.value);
+									const form = Object.assign({}, s.form);
+									if (pr) for (const k of Object.keys(pr.values)) form[k] = String(pr.values[k]);
+									patchKind(kind, { preset: e.target.value, form: form });
+								},
+							}, [h("option", { key: "", value: "" }, "选择预设…")].concat(meta.presets.map((x) => h("option", { key: x.id, value: x.id }, x.label))))
+							: null),
+					meta.fields.length ? null : h("div", { className: "fy-hint" }, "本地 provider，无需配置。"),
+					meta.fields.map((f) => h(Row, { label: f.label + (f.required ? " *" : ""), key: f.key },
+						h("input", {
+							className: "fy-input fy-w-md", type: f.type === "password" ? "password" : (f.type === "number" ? "number" : "text"),
+							autoComplete: "off", value: s.form[f.key] == null ? "" : s.form[f.key],
+							placeholder: f.secret ? (s.hasKey ? "已保存，留空保持不变" : "") : (f.placeholder || ""),
+							onChange: (e) => patchKind(kind, { form: Object.assign({}, s.form, { [f.key]: e.target.value }) }),
+						}),
+						f.secret ? h("span", { className: "fy-tag" }, s.hasKey ? "已保存" : "未配置") : null,
+						f.hint ? h("span", { className: "fy-hint", style: { marginTop: 0 } }, f.hint) : null)),
+					h(Row, { label: "" },
+						meta.testable ? h("button", { className: "fy-btn primary", disabled: s.busy, onClick: () => doTest(kind) }, s.busy ? "测试中…" : "测试连接") : null,
+						meta.testable ? h("span", { className: "fy-hint", style: { marginTop: 0 } }, "通过后自动启用为主") : null,
+						meta.testable ? h(Switch, { on: s.auto, label: kind + "-auto", onChange: (v) => patchKind(kind, { auto: v }) }) : null,
+						meta.fields.length ? h("button", { className: "fy-btn", disabled: s.busy, onClick: () => doSave(kind) }, "仅保存") : null),
+					s.res ? h("div", { className: "fy-notice" + (s.res.ok ? "" : " err") }, s.res.text) : null);
+			};
+
+			const pd = describePipeline(data && data.pipeline);
+			return h("div", { className: "fy-prov" },
+				err ? h("div", { className: "fy-notice err" }, "云端 ASR/TTS 配置读取失败：" + err) : null,
+				data ? h(Row, { label: "生效 provider" }, h("span", { className: "fy-mono" }, pd.text)) : null,
+				pd.warn ? h("div", { className: "fy-notice err" }, pd.warn) : null,
+				renderKind("asr"),
+				renderKind("tts"));
+		}
+
 		function Esp32Card() {
 			const [st, setSt] = useState(null);
 			const [rows, setRows] = useState([]);
@@ -321,6 +482,9 @@ textarea.fy-input{width:100%;min-height:136px;resize:vertical;line-height:1.65;f
 					h("span", { className: "fy-mono" }, (st && st.otaUrl) || "—"),
 					h("button", { className: "fy-btn", onClick: copyOta, disabled: !(st && st.otaUrl) },
 						copied ? "已复制 ✓" : "复制")),
+
+				// 云端 ASR / TTS 配置
+				h(Esp32Providers, { onChanged: load }),
 
 				// 在线设备
 				h("div", { className: "fy-sub", style: { marginTop: 10 } }, "在线设备"),
