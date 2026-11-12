@@ -34,6 +34,8 @@ const { createGateway } = await import('../../lib/esp32/gateway.js')
 const { createEsp32Session } = await import('../../lib/esp32/session.js')
 const { encodeDownlinkFrame, closeSharedOpus } = await import('../../lib/esp32/audio/opus.js')
 const { AUDIO } = await import('../../lib/esp32/contracts.js')
+const { createMockVolc } = await import('./mock-volc.mjs')
+const { createVolcScenarios } = await import('./volc-scenarios.mjs')
 const {
   createSimDevice,
   expectUpgradeRejected,
@@ -223,7 +225,7 @@ async function waitUntil(predicate, timeoutMs, label) {
 function makeSessionFactory(scope) {
   return (args) => createEsp32Session({
     ...args,
-    createPipeline: scope.harness.createPipeline,
+    createPipeline: scope.createPipelineOverride ?? scope.harness.createPipeline,
     logger: scope.logSink.logger,
     idleDisconnectMs: 60_000,
   })
@@ -654,12 +656,15 @@ function createAbortScenario() {
 
 // ── 运行器 ──────────────────────────────────────────────────────────────────
 
+// 火山 mock 服务全程共用一个实例（场景内 mock.reset() 隔离状态）。
+const mockVolc = await createMockVolc()
 const scenarios = [
   helloScenario,
   tokenScenario,
   createListenSttScenario(),
   createDownlinkScenario(),
   createAbortScenario(),
+  ...createVolcScenarios({ withGateway, mock: mockVolc, sinePcm, AUDIO }),
 ]
 
 async function runScenario(entry) {
@@ -715,6 +720,9 @@ try {
 } catch (error) {
   console.error('E2E 运行器异常：', error?.stack ?? error)
 } finally {
+  try {
+    await mockVolc.close()
+  } catch { /* mock 关闭失败不影响退出码 */ }
   try {
     closeSharedOpus()
   } catch { /* WASM 释放失败不影响退出码 */ }
