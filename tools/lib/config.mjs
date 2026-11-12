@@ -312,7 +312,7 @@ export const DEFAULTS = {
   brain: {
     enabled: true,
     mode: 'shadow',                 // shadow | live | off
-    livePlatforms: ['qq', 'douyin-dm'], // live 时切哪些通道的私聊
+    livePlatforms: ['qq', 'douyin-dm', 'esp32'], // live 时切哪些通道的私聊
     liveChats: [],                  // 空 = livePlatforms 里的私聊全切；填了就只切这几个 chatId
     liveGroups: [],                 // 群聊要逐群切（群里的对照最要紧）：填 chatId 才走新装配
     executor: 'promises',           // promises=旧账本执行 | intents=脑的意图账本执行（S4）

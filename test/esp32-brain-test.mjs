@@ -17,6 +17,9 @@ process.env.FEIYU_CONFIG = path.join(TMP, 'feiyu.config.json')
 process.env.FEIYU_DATA_DIR = path.join(TMP, '.feiyu-ai')
 fs.mkdirSync(process.env.DSH_HOME, { recursive: true })
 fs.mkdirSync(process.env.FEIYU_DATA_DIR, { recursive: true })
+// 环境变量优先于配置文件：清掉，保证用例只受临时配置控制
+delete process.env.DEEPSEEK_API_KEY
+delete process.env.LLM_API_KEY
 
 const BASE_USER_CONFIG = {
   identity: { name: '大肥鱼', ownerTitle: '主人', selfClaim: '我' },
@@ -103,6 +106,11 @@ test('DEFAULTS.esp32 与 contracts.DEFAULT_ESP32_CONFIG 完全一致（同源克
   assert.deepEqual(configMod.DEFAULTS.esp32, JSON.parse(JSON.stringify(contracts.DEFAULT_ESP32_CONFIG)))
   assert.notEqual(configMod.DEFAULTS.esp32, contracts.DEFAULT_ESP32_CONFIG)
   assert.notEqual(configMod.DEFAULTS.esp32.vad, contracts.DEFAULT_ESP32_CONFIG.vad)
+})
+
+test('DEFAULTS.brain.livePlatforms 含 esp32（live 模式可切第五通道）', () => {
+  assert.ok(Array.isArray(configMod.DEFAULTS.brain.livePlatforms))
+  assert.ok(configMod.DEFAULTS.brain.livePlatforms.includes('esp32'))
 })
 
 test('saveEsp32Config：深合并、保留他人配置、数组替换、原子写、返回全量配置', async () => {
@@ -229,6 +237,167 @@ test('llm.chat / chatStream：外部 signal 与超时同时生效', async () => 
     )
   } finally {
     globalThis.fetch = originalFetch
+  }
+})
+
+// ── llm：chatStream 双通道 fallback + 错误体 ─────────────────────────────────
+const FALLBACK_LLM = {
+  base_url: 'http://127.0.0.1:9/v1',
+  model: 'main-model',
+  api_key: 'main-key-aaa',
+  fallback: { base_url: 'http://127.0.0.1:8/v1', model: 'fb-model', api_key: 'fb-key-bbb' },
+}
+const writeFallbackConfig = () => writeUserConfig({ ...BASE_USER_CONFIG, llm: FALLBACK_LLM })
+
+function sseResponse(chunks) {
+  const enc = new TextEncoder()
+  let i = 0
+  return {
+    ok: true,
+    body: {
+      getReader: () => ({
+        async read() {
+          if (i >= chunks.length) return { done: true, value: undefined }
+          const frame = JSON.stringify({ choices: [{ delta: { content: chunks[i++] } }] })
+          return { done: false, value: enc.encode(`data: ${frame}\n\n`) }
+        },
+      }),
+    },
+  }
+}
+
+test('llm.chatStream：主通道 401 自动落到备通道（备 key 独立、写 fallback 日志）', async () => {
+  const originalFetch = globalThis.fetch
+  const seen = []
+  writeFallbackConfig()
+  try {
+    let calls = 0
+    globalThis.fetch = async (url, init) => {
+      seen.push({ url, headers: init.headers, body: JSON.parse(init.body) })
+      calls += 1
+      if (calls === 1) return { ok: false, status: 401, text: async () => '{"error":"invalid api key"}' }
+      return sseResponse(['备通道好。'])
+    }
+    const chunks = await collect(llm.chatStream([{ role: 'user', content: 'hi' }]))
+    assert.equal(chunks.join(''), '备通道好。')
+    assert.equal(seen.length, 2, '主通道失败后应尝试备通道')
+    assert.match(seen[0].url, /127\.0\.0\.1:9/)
+    assert.equal(seen[0].headers.Authorization, 'Bearer main-key-aaa')
+    assert.match(seen[1].url, /127\.0\.0\.1:8/)
+    assert.equal(seen[1].headers.Authorization, 'Bearer fb-key-bbb', '备通道必须用备通道自己的 key，不得复用主 key')
+    assert.equal(seen[1].body.model, 'fb-model')
+    assert.equal(seen[1].body.stream, true)
+
+    const logPath = path.join(process.env.FEIYU_DATA_DIR, 'llm-fallback.log')
+    assert.ok(fs.existsSync(logPath), '成功走备通道应写 llm-fallback.log')
+    assert.match(fs.readFileSync(logPath, 'utf8'), /备通道/)
+    assert.doesNotMatch(fs.readFileSync(logPath, 'utf8'), /main-key-aaa|fb-key-bbb/, '日志不得记录 key')
+  } finally {
+    globalThis.fetch = originalFetch
+    writeUserConfig()
+  }
+})
+
+test('llm.chatStream：主通道非 2xx 错误信息包含响应体', async () => {
+  const originalFetch = globalThis.fetch
+  try {
+    globalThis.fetch = async () => ({ ok: false, status: 402, text: async () => '{"error":"insufficient balance"}' })
+    await assert.rejects(
+      collect(llm.chatStream([{ role: 'user', content: 'hi' }])),
+      (err) => /LLM HTTP 402/.test(err.message) && /insufficient balance/.test(err.message),
+    )
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})
+
+test('llm.chatStream：noFallback 时主通道失败直接抛、不碰备通道', async () => {
+  const originalFetch = globalThis.fetch
+  const seen = []
+  writeFallbackConfig()
+  try {
+    globalThis.fetch = async (url) => { seen.push(url); return { ok: false, status: 500, text: async () => 'main boom' } }
+    await assert.rejects(
+      collect(llm.chatStream([{ role: 'user', content: 'hi' }], { noFallback: true })),
+      /LLM HTTP 500/,
+    )
+    assert.equal(seen.length, 1, 'noFallback 不应请求备通道')
+  } finally {
+    globalThis.fetch = originalFetch
+    writeUserConfig()
+  }
+})
+
+test('llm.chatStream：主备都失败 → 错误信息合并两边原因', async () => {
+  const originalFetch = globalThis.fetch
+  writeFallbackConfig()
+  try {
+    globalThis.fetch = async (url) => (url.includes(':9/')
+      ? { ok: false, status: 401, text: async () => 'main-unauthorized' }
+      : { ok: false, status: 503, text: async () => 'fb-unavailable' })
+    await assert.rejects(
+      collect(llm.chatStream([{ role: 'user', content: 'hi' }])),
+      (err) => /main-unauthorized/.test(err.message) && /fb-unavailable/.test(err.message),
+    )
+  } finally {
+    globalThis.fetch = originalFetch
+    writeUserConfig()
+  }
+})
+
+test('llm.chatStream：已吐内容后中断不再走备通道（避免重复回答）', async () => {
+  const originalFetch = globalThis.fetch
+  const seen = []
+  const enc = new TextEncoder()
+  writeFallbackConfig()
+  try {
+    globalThis.fetch = async (url) => {
+      seen.push(url)
+      let n = 0
+      return {
+        ok: true,
+        body: {
+          getReader: () => ({
+            async read() {
+              n += 1
+              if (n === 1) return { done: false, value: enc.encode('data: {"choices":[{"delta":{"content":"半句"}}]}\n\n') }
+              throw new Error('socket hang up')
+            },
+          }),
+        },
+      }
+    }
+    const got = []
+    await assert.rejects(async () => {
+      for await (const c of llm.chatStream([{ role: 'user', content: 'hi' }])) got.push(c)
+    }, /socket hang up/)
+    assert.equal(got.join(''), '半句')
+    assert.equal(seen.length, 1, '已经产出内容后不得换备通道重放')
+  } finally {
+    globalThis.fetch = originalFetch
+    writeUserConfig()
+  }
+})
+
+test('llm.chatStream：主通道被外部中止时不走备通道', async () => {
+  const originalFetch = globalThis.fetch
+  const seen = []
+  writeFallbackConfig()
+  try {
+    globalThis.fetch = async (url) => {
+      seen.push(url)
+      const err = new Error('aborted')
+      err.name = 'AbortError'
+      throw err
+    }
+    await assert.rejects(
+      collect(llm.chatStream([{ role: 'user', content: 'hi' }])),
+      { name: 'AbortError' },
+    )
+    assert.equal(seen.length, 1, '用户打断不是主通道故障，不应触发 fallback')
+  } finally {
+    globalThis.fetch = originalFetch
+    writeUserConfig()
   }
 })
 

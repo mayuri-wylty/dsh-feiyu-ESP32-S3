@@ -313,6 +313,34 @@ test('factory：getSpeechToText 抛错 → 按不可用处理（降级回声）'
   assert.ok(logger.warns.some((w) => w.message.includes('解析 speechToText 失败')))
 })
 
+test('factory：qa 且 LLM Key 未配置 → 管线仍可用并告警一次（同配置不刷屏）', () => {
+  const logger = makeLogger()
+  const createPipeline = createEsp32PipelineFactory({
+    getConfig: () => ({ esp32: { pipeline: 'qa', tts: { provider: 'sovits-sentence' } } }),
+    getSpeechToText: () => makeFakeStt(),
+    logger,
+    apiKey: () => '',
+  })
+  const a = createPipeline(makeCtx('dev-a'))
+  const b = createPipeline(makeCtx('dev-b'))
+  assert.equal(typeof a.drain, 'function', '缺 Key 不应阻断管线构造（失败要在对话时暴露）')
+  assert.equal(typeof b.drain, 'function')
+  const keyWarns = logger.warns.filter((w) => /API Key/i.test(w.message))
+  assert.equal(keyWarns.length, 1, '同一配置下只告警一次')
+})
+
+test('factory：qa 且 LLM Key 已配置 → 不告警', () => {
+  const logger = makeLogger()
+  const createPipeline = createEsp32PipelineFactory({
+    getConfig: () => ({ esp32: { pipeline: 'qa', tts: { provider: 'sovits-sentence' } } }),
+    getSpeechToText: () => makeFakeStt(),
+    logger,
+    apiKey: () => 'sk-test-only',
+  })
+  createPipeline(makeCtx())
+  assert.equal(logger.warns.filter((w) => /API Key/i.test(w.message)).length, 0)
+})
+
 test('factory：依赖按配置签名缓存，配置不变复用同一实例', () => {
   const stt = makeFakeStt()
   const esp32 = { pipeline: 'qa', tts: { provider: 'sovits-sentence' } }

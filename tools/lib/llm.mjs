@@ -115,33 +115,65 @@ export async function chat(messages, opts = {}) {
   }
 }
 
-/** 流式：边收边吐增量文本（思考链外显 / 分句发送）。 */
+/**
+ * 流式：边收边吐增量文本（思考链外显 / 分句发送）。
+ *
+ * 双通道同 chat()：主通道在「尚未吐出任何内容」时失败，自动换 llm.fallback。
+ * 已经吐过内容的流绝不切换（否则同一轮会重复回答）；外部中止与
+ * opts.noFallback 同样不切换。错误信息带响应体，401/402 才看得出原因。
+ */
 export async function* chatStream(messages, opts = {}) {
-  const r = await fetch(endpoint(), {
-    method: 'POST',
-    headers: headers(),
-    body: JSON.stringify(payload(messages, { ...opts, stream: true })),
-    signal: signalFor(opts, 120000),
-  })
-  if (!r.ok) throw new Error(`LLM HTTP ${r.status}`)
-  const reader = r.body.getReader()
-  const dec = new TextDecoder()
-  let buf = ''
-  while (true) {
-    const { done, value } = await reader.read()
-    if (done) break
-    buf += dec.decode(value, { stream: true })
-    let idx
-    while ((idx = buf.indexOf('\n')) >= 0) {
-      const line = buf.slice(0, idx).trim()
-      buf = buf.slice(idx + 1)
-      if (!line.startsWith('data: ')) continue
-      const data = line.slice(6)
-      if (data === '[DONE]') return
-      try {
-        const delta = JSON.parse(data).choices?.[0]?.delta?.content
-        if (delta) yield delta
-      } catch { /* 忽略坏帧 */ }
+  const main = _cfg()
+  const fb = _fb()
+
+  const streamOne = async function* (c) {
+    const r = await fetch(endpointOf(c), {
+      method: 'POST',
+      headers: headersOf({ ...c, api_key: c.api_key || apiKey() }),
+      body: JSON.stringify(payloadOf(c, messages, { ...opts, stream: true })),
+      signal: signalFor(opts, 120000),
+    })
+    if (!r.ok) throw new Error(`LLM HTTP ${r.status}: ${(await r.text()).slice(0, 200)}`)
+    const reader = r.body.getReader()
+    const dec = new TextDecoder()
+    let buf = ''
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+      buf += dec.decode(value, { stream: true })
+      let idx
+      while ((idx = buf.indexOf('\n')) >= 0) {
+        const line = buf.slice(0, idx).trim()
+        buf = buf.slice(idx + 1)
+        if (!line.startsWith('data: ')) continue
+        const data = line.slice(6)
+        if (data === '[DONE]') return
+        try {
+          const delta = JSON.parse(data).choices?.[0]?.delta?.content
+          if (delta) yield delta
+        } catch { /* 忽略坏帧 */ }
+      }
+    }
+  }
+
+  let yielded = false
+  try {
+    for await (const delta of streamOne(main)) {
+      yielded = true
+      yield delta
+    }
+  } catch (e) {
+    const aborted = e?.name === 'AbortError' || Boolean(opts.signal?.aborted)
+    if (yielded || aborted || opts.noFallback || !fb.model || !(fb.api_key || fb.base_url)) throw e
+    try {
+      // 备通道有自己的私有参数体系，别把主通道的 params 带过去
+      for await (const delta of streamOne({ ...main, ...fb, params: fb.params ?? {} })) {
+        yielded = true
+        yield delta
+      }
+      try { (await import('node:fs')).appendFileSync((await import('./paths.mjs')).dataPath('llm-fallback.log'), `${new Date().toISOString()} 主通道失败(${String(e.message).slice(0, 80)}) → 已用备通道\n`) } catch {}
+    } catch (e2) {
+      throw new Error(`主通道失败（${String(e.message).slice(0, 90)}）；备通道也失败（${String(e2.message).slice(0, 90)}）`)
     }
   }
 }

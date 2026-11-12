@@ -458,11 +458,11 @@ test('brain 抛错：不崩，已开始的 TTS 收尾（stop），回落 listeni
   pipeline.onClose()
 })
 
-test('brain 首事件即抛错：不崩，不下发 tts，回落 listening', async () => {
+test('brain 首事件即抛错：不崩，下发 tts stop 让固件退出 speaking，回落 listening', async () => {
   const ctx = createFakeCtx()
   const asr = createFakeAsr()
   const tts = createFakeTts()
-  const brain = createFakeBrain({ error: new Error('llm 502') })
+  const brain = createFakeBrain({ error: new Error('LLM HTTP 401: invalid api key') })
   const vad = createScriptedVad(
     scriptOf(14, {
       0: { type: 'speech_start', atMs: 0 },
@@ -473,7 +473,72 @@ test('brain 首事件即抛错：不崩，不下发 tts，回落 listening', asy
   await assert.doesNotReject(() => runOneTurn(pipeline))
 
   assert.equal(ctx.transitions.at(-1), 'listening')
-  assert.equal(ttsEvents(ctx).length, 0, '未开始播放时不应下发 tts')
+  // 固件端未收到 tts start 时 stop 是安全 no-op；收到过 start 时它负责退出 speaking。
+  assert.deepEqual(ttsEvents(ctx).map((e) => e.state), ['stop'], '失败路径必须下发 tts stop')
+  pipeline.onClose()
+})
+
+test('brain 抛错：onError 收到错误与设备信息（供宿主记录 lastError）', async () => {
+  const ctx = createFakeCtx()
+  const asr = createFakeAsr()
+  const tts = createFakeTts()
+  const brain = createFakeBrain({ error: new Error('LLM HTTP 401: invalid api key') })
+  const vad = createScriptedVad(
+    scriptOf(14, {
+      0: { type: 'speech_start', atMs: 0 },
+      13: { type: 'speech_end', atMs: 800, reason: 'silence' },
+    }),
+  )
+  const errors = []
+  const pipeline = createQaPipeline({
+    ctx,
+    asr,
+    tts,
+    brain,
+    vad,
+    config: { vad: { minSpeechMs: 250 } },
+    onError: (error, meta) => errors.push({ error, meta }),
+  })
+  await runOneTurn(pipeline)
+
+  assert.equal(errors.length, 1, '应上报一次错误')
+  assert.match(String(errors[0].error?.message), /LLM HTTP 401/)
+  assert.equal(errors[0].meta?.deviceId, 'qa-dev')
+  assert.equal(errors[0].meta?.stage, 'brain')
+  pipeline.onClose()
+})
+
+test('brain 抛错但已 abort：不上报 onError（用户打断不是故障）', async () => {
+  const ctx = createFakeCtx()
+  const asr = createFakeAsr()
+  const tts = createFakeTts()
+  const brain = {
+    async *handleUtterance(args) {
+      yield { type: 'emotion', emotion: 'happy' }
+      const err = new Error('aborted')
+      err.name = 'AbortError'
+      throw err
+    },
+  }
+  const vad = createScriptedVad(
+    scriptOf(14, {
+      0: { type: 'speech_start', atMs: 0 },
+      13: { type: 'speech_end', atMs: 800, reason: 'silence' },
+    }),
+  )
+  const errors = []
+  const pipeline = createQaPipeline({
+    ctx,
+    asr,
+    tts,
+    brain,
+    vad,
+    config: { vad: { minSpeechMs: 250 } },
+    onError: (error) => errors.push(error),
+  })
+  await runOneTurn(pipeline)
+
+  assert.equal(errors.length, 0, 'AbortError 不应上报')
   pipeline.onClose()
 })
 

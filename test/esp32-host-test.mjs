@@ -259,7 +259,7 @@ test('status 字段形状：otaUrl / tokenSet / asrAvailable', async () => {
   })
   await host.start()
   const status = host.status()
-  for (const key of ['ok', 'enabled', 'running', 'address', 'publicHost', 'otaUrl', 'tokenSet', 'asrAvailable', 'devices', 'lastError']) {
+  for (const key of ['ok', 'enabled', 'running', 'address', 'publicHost', 'otaUrl', 'tokenSet', 'llmKeySet', 'asrAvailable', 'devices', 'lastError']) {
     assert.ok(key in status, `status 缺少字段 ${key}`)
   }
   assert.equal(status.tokenSet, true)
@@ -378,5 +378,55 @@ test('createPipeline：缺省不传管线；注入时收到 sessionCtx 与依赖
   assert.equal(seen[0].sessionCtx.deviceId, 'dev-1')
   assert.equal(typeof seen[0].deps.getSpeechToText, 'function')
   assert.equal(typeof seen[0].deps.getConfig, 'function')
+  assert.equal(typeof seen[0].deps.reportError, 'function', '管线需拿到 reportError 记录 lastError')
+  await host.stop()
+})
+
+// ── 9. llmKeySet：状态页可见「Key 是否已配置」（不回传明文）──────────────────
+test('status.llmKeySet：有 Key 为 true、无 Key 为 false，且不回传明文', async () => {
+  const { factory } = makeFakeGateway()
+  const withKey = createEsp32Host({
+    getConfig: makeConfig({ enabled: false }),
+    createGateway: factory,
+    createSession: makeFakeSessionFactory().factory,
+    getLlmApiKey: () => 'sk-test-abcdef',
+  })
+  assert.equal(withKey.status().llmKeySet, true)
+  assert.equal(JSON.stringify(withKey.status()).includes('sk-test-abcdef'), false, 'status 不得回传 Key 明文')
+
+  const withoutKey = createEsp32Host({
+    getConfig: makeConfig({ enabled: false }),
+    createGateway: factory,
+    createSession: makeFakeSessionFactory().factory,
+    getLlmApiKey: () => '',
+  })
+  assert.equal(withoutKey.status().llmKeySet, false)
+})
+
+// ── 10. reportError：管线异常写入 lastError（脱敏）───────────────────────────
+test('deps.reportError：错误写入 status.lastError 且脱敏 token', async () => {
+  const { factory, state } = makeFakeGateway()
+  const sessions = makeFakeSessionFactory()
+  const { logger, rows } = makeLogger()
+  const host = createEsp32Host({
+    getConfig: makeConfig(),
+    createGateway: factory,
+    createSession: sessions.factory,
+    createPipeline: (sessionCtx, deps) => {
+      deps.reportError(new Error(`LLM HTTP 401 token=${TOKEN}`), { deviceId: sessionCtx.deviceId, stage: 'brain' })
+      return { onOpen() {} }
+    },
+    getSpeechToText: () => null,
+    logger,
+  })
+  await host.start()
+  state.createSession({ deviceId: 'dev-1', sessionId: 'sess-1', sendJson: () => true, sendBinary: () => true, close: () => {} })
+
+  const status = host.status()
+  assert.ok(status.lastError, '应记录管线错误')
+  assert.match(status.lastError, /LLM HTTP 401/)
+  assert.ok(!status.lastError.includes(TOKEN), 'lastError 不得包含 token')
+  assert.ok(!JSON.stringify(rows).includes(TOKEN), '日志不得包含 token')
+  assert.ok(rows.some(([level, message]) => level === 'warn' && String(message).includes('LLM HTTP 401')), '应记录 warn 日志')
   await host.stop()
 })
