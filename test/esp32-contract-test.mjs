@@ -119,7 +119,7 @@ test('云端 provider：火山 id 与配置默认值', () => {
   assert.equal(asr.volcengine.resourceId, 'volc.bigasr.auc_turbo')
   assert.equal(asr.volcengine.apiKey, '')
   assert.equal(tts.volcengine.resourceId, 'seed-tts-2.0')
-  assert.equal(tts.volcengine.connectTimeoutMs, 5000)
+  assert.equal(tts.volcengine.connectTimeoutMs, 10000)
   assert.equal(tts.volcengine.apiKey, '')
   assert.equal(asr.openai.timeoutMs, 30000)
   assert.equal(tts.cloud.speed, 1)
