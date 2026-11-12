@@ -105,6 +105,7 @@ window.__ModuleLoader__.load({
   padding:6px 9px;font:inherit;font-size:13px;min-width:0;outline:none}
 input.fy-input:focus,select.fy-input:focus,textarea.fy-input:focus{border-color:var(--dsw-alias-brand-primary,#3b6cf6)}
 input.fy-input{width:190px}
+input.fy-w-lg{width:340px}
 input.fy-w-md{width:248px}
 input.fy-w-sm{width:84px}
 input.fy-w-xs{width:64px}
@@ -436,6 +437,10 @@ textarea.fy-input{width:100%;min-height:136px;resize:vertical;line-height:1.65;f
 				evoDays: (c.personality && c.personality.evolve && c.personality.evolve.days != null) ? c.personality.evolve.days : 2,
 				freedomOn: !!(c.freedom && c.freedom.enabled),
 					voicePath: (c.voice && c.voice.ref_audio_path) || "",
+					// 大脑：后端 /config 对 llm 段脱敏（删 api_key、加 hasKey），明文永不回显
+					llmBaseUrl: (c.llm && c.llm.base_url) || "",
+					llmModel: (c.llm && c.llm.model) || "",
+					llmKey: "",
 					wxRhythm: (c.wechat && c.wechat.rhythm) || "fast",
 					wxMerge: (c.wechat && c.wechat.merge_window_sec != null) ? c.wechat.merge_window_sec : 3,
 					wxContext: (c.wechat && c.wechat.context_n != null) ? c.wechat.context_n : 12,
@@ -499,6 +504,25 @@ textarea.fy-input{width:100%;min-height:136px;resize:vertical;line-height:1.65;f
 
 			// 主动搭话专用保存：把单字段补丁并进完整 proactive 镜像再全量发（防字段被浅合并冲掉）
 			const saveProactive = useCallback(async (patch, msg) => save({ qq: { proactive: patch } }, msg), [save]);
+
+			// LLM Key 单独保存：明文只上行一次，成功后镜像里只留 hasKey，绝不进 DOM/状态
+			const saveLlmKey = useCallback(async () => {
+				const key = String(draft.llmKey || "").trim();
+				if (!key) { flash("Key 留空表示保持不变", true); return; }
+				setBusy("llmkey");
+				try {
+					await api("/config", { method: "POST", body: JSON.stringify({ llm: { api_key: key } }) });
+					setCfg((prev) => {
+						const next = Object.assign({}, prev || {});
+						next.llm = Object.assign({}, (prev && prev.llm) || {}, { hasKey: true });
+						return next;
+					});
+					setDraft((prev) => Object.assign({}, prev, { llmKey: "" }));
+					flash("LLM Key 已保存（下次对话生效）");
+				} catch (e) {
+					flash("保存失败：" + ((e && e.message) || e), true);
+				} finally { setBusy(""); }
+			}, [draft, flash]);
 
 			const genReport = useCallback(async () => {
 				setBusy("report");
@@ -775,6 +799,42 @@ textarea.fy-input{width:100%;min-height:136px;resize:vertical;line-height:1.65;f
 							className: "fy-input fy-w-md", value: draft.douyinOwner, placeholder: "（分享给主人的私信目标）",
 							onChange: (e) => setDraft(Object.assign({}, draft, { douyinOwner: e.target.value })),
 							onBlur: () => save({ douyin: { owner: { name: draft.douyinOwner.trim() } } }, "主人抖音昵称已保存"),
+						}))),
+
+				// 大脑（LLM）
+				h(Card, {
+					title: "大脑（LLM）",
+					hint: "所有平台（QQ/微信/抖音/B站/ESP32）共用这一个大脑。Key 只写入本机 feiyu.config.json，保存后不回显；环境变量 DEEPSEEK_API_KEY / LLM_API_KEY 优先于这里。改完下次对话生效。",
+				},
+					h(Row, { label: "API Key" },
+						h("input", {
+							className: "fy-input fy-w-lg", type: "password", autoComplete: "off",
+							value: draft.llmKey,
+							placeholder: (cfg.llm && cfg.llm.hasKey) ? "已配置，留空则保持不变" : "sk-…（未配置）",
+							onChange: (e) => setDraft(Object.assign({}, draft, { llmKey: e.target.value })),
+						}),
+						h("span", { className: "fy-tag" }, (cfg.llm && cfg.llm.hasKey) ? "已配置" : "未配置"),
+						h("button", {
+							className: "fy-btn primary", onClick: saveLlmKey,
+							disabled: !!busy || !String(draft.llmKey || "").trim(),
+						}, busy === "llmkey" ? "保存中…" : "保存 Key")),
+					h(Row, { label: "接口地址" },
+						h("input", {
+							className: "fy-input fy-w-lg", value: draft.llmBaseUrl, placeholder: "https://api.deepseek.com/v1",
+							onChange: (e) => setDraft(Object.assign({}, draft, { llmBaseUrl: e.target.value })),
+							onBlur: () => {
+								const v = draft.llmBaseUrl.trim();
+								if (v) save({ llm: { base_url: v } }, "接口地址已保存");
+							},
+						})),
+					h(Row, { label: "模型" },
+						h("input", {
+							className: "fy-input fy-w-lg", value: draft.llmModel, placeholder: "deepseek-chat",
+							onChange: (e) => setDraft(Object.assign({}, draft, { llmModel: e.target.value })),
+							onBlur: () => {
+								const v = draft.llmModel.trim();
+								if (v) save({ llm: { model: v } }, "模型已保存");
+							},
 						}))),
 
 				// 音色

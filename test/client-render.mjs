@@ -22,6 +22,8 @@ const CONFIG = {
   douyin: { maxPerRun: 2 },
   qq: { voice_chance: 0.5 },
   voice: { ref_audio_path: 'D:/AI_Code/小智机器人/GPT-SoVITS/models/sunshine_girl/sunshine_girl.wav' },
+  // 后端 /config 对 llm 段脱敏：删 api_key，加 hasKey
+  llm: { base_url: 'https://api.deepseek.com/v1', model: 'deepseek-chat', hasKey: false },
 }
 const VOICES = [
   { name: 'sunshine_girl', ref_audio_path: 'D:/AI_Code/小智机器人/GPT-SoVITS/models/sunshine_girl/sunshine_girl.wav', prompt_text: '参考文本', has_prompt: true },
@@ -120,8 +122,13 @@ globalThis.document = {
   createElement: () => ({ dataset: {}, textContent: '', remove() {} }),
 }
 let fetchCalls = []
-globalThis.fetch = async (url) => {
+let fetchPosts = []
+globalThis.fetch = async (url, init) => {
   fetchCalls.push(url)
+  if (init && init.method === 'POST') {
+    fetchPosts.push({ url, body: init.body })
+    return { ok: true, status: 200, text: async () => JSON.stringify({ ok: true }) }
+  }
   const data = RESPONSES[url]
   if (!data) return { ok: false, status: 404, text: async () => JSON.stringify({ ok: false, error: 'no fixture: ' + url }) }
   return { ok: true, status: 200, text: async () => JSON.stringify(data) }
@@ -214,6 +221,45 @@ assert.ok(!text.includes('secret-token-xyz'), '状态里即使混进 token 明�
 assert.ok(!/"token"\s*:/.test(JSON.stringify(tree)), '渲染树不得携带 token 字段')
 assert.ok(fetchCalls.some((u) => u.startsWith('/dsh-feiyu/api/esp32/log?device=')), '没有请求 esp32/log')
 
+// ── 大脑（LLM）卡片：DSH 面板内置（主人 ↔ 音色之间）──────────────────────────
+const rerender = async () => {
+  for (let pass = 0; pass < 12; pass++) {
+    hookIndex = 0
+    dirty = false
+    tree = Component({ close: () => {} })
+    await flush()
+    await flush()
+    if (!dirty) break
+  }
+}
+const collect2 = (node, predicate, acc = []) => collect(node, predicate, acc)
+const inputsOf = (root) => collect2(root, (n) => n.type === 'input')
+
+assert.ok(text.includes('大脑（LLM）'), 'DSH 面板缺少「大脑（LLM）」卡片（应在主人与音色之间）')
+assert.ok(text.includes('接口地址') && text.includes('模型'), '大脑卡片缺少接口地址/模型')
+const keyInput = inputsOf(tree).find((n) => n.props.type === 'password')
+assert.ok(keyInput, '应有 password 类型的 API Key 输入')
+assert.equal(keyInput.props.value, '', 'Key 不得回显（保存后后端也不回传明文）')
+assert.ok(String(keyInput.props.placeholder).includes('未配置'), '未配置时 placeholder 应提示未配置')
+assert.ok(inputsOf(tree).some((n) => n.props.value === 'https://api.deepseek.com/v1'), '接口地址应从配置回填')
+assert.ok(inputsOf(tree).some((n) => n.props.value === 'deepseek-chat'), '模型应从配置回填')
+
+// 输入 Key → 点「保存 Key」→ POST { llm: { api_key } } → 输入框清空、状态变已配置
+keyInput.props.onChange({ target: { value: ' sk-test ' } })
+await rerender()
+const saveKeyBtn = collect2(tree, (n) => n.type === 'button')
+  .find((n) => (n.children || []).includes('保存 Key'))
+assert.ok(saveKeyBtn, '应有「保存 Key」按钮')
+await saveKeyBtn.props.onClick()
+await rerender()
+const post = fetchPosts.find((p) => p.url === '/dsh-feiyu/api/config' && String(p.body).includes('api_key'))
+assert.ok(post, '保存 Key 应 POST /config')
+assert.deepEqual(JSON.parse(post.body), { llm: { api_key: 'sk-test' } }, 'Key 应 trim 后只放 llm.api_key')
+assert.ok(!JSON.stringify(tree).includes('sk-test'), 'Key 不得留在渲染树/面板状态里')
+const keyAfter = inputsOf(tree).find((n) => n.props.type === 'password')
+assert.equal(keyAfter.props.value, '', '保存后 Key 输入框应清空')
+assert.ok(String(keyAfter.props.placeholder).includes('已配置'), '保存后应显示已配置')
+
 // ── ESP32 卡片空状态：未启用 + 无设备，不能崩 ───────────────────────────────
 RESPONSES['/dsh-feiyu/api/esp32/status'] = {
   ok: true, enabled: false, running: false, address: null, publicHost: null,
@@ -238,4 +284,4 @@ for (const must of ['ESP32 通道未启用', '未配置', '通道未启用，暂
   assert.ok(emptyText.includes(must), 'ESP32 空状态缺少：' + must)
 }
 
-console.log('client-render ✓  渲染通过：9 个区块 · 4 个平台开关 · ESP32 卡片（正常态 + 空状态）· 请求', fetchCalls.length, '次')
+console.log('client-render ✓  渲染通过：9 个区块 · 4 个平台开关 · 大脑（LLM）卡片 · ESP32 卡片（正常态 + 空状态）· 请求', fetchCalls.length, '次')
