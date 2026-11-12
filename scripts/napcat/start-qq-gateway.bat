@@ -55,7 +55,9 @@ if not exist "%QQPath%" (
 )
 
 echo [NapCat] starting QQ gateway, QQ=%QQPath%
-"%NAPCAT_LAUNCHER_PATH%" "%QQPath%" "%NAPCAT_INJECT_PATH%" %*
+set "QQACC="
+if exist "%~dp0qq-account.txt" set /p QQACC=<"%~dp0qq-account.txt"
+"%NAPCAT_LAUNCHER_PATH%" "%QQPath%" "%NAPCAT_INJECT_PATH%" %QQACC%
 exit /b %ERRORLEVEL%
 
 :register_task

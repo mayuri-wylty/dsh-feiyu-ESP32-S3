@@ -307,7 +307,9 @@ def llm_chat(cfg, messages, temperature=0.85):
     }).encode("utf-8")
     req = urllib.request.Request(
         f"{base}/chat/completions", data=body,
-        headers={"Content-Type": "application/json", "Authorization": f"Bearer {key}"},
+        # 显式 UA：Cloudflare 前置的中转站会 403 默认的 Python-urllib/x.y
+        headers={"Content-Type": "application/json", "Authorization": f"Bearer {key}",
+                 "User-Agent": "dsh-feiyu-wechat/1.0"},
     )
     try:
         with urllib.request.urlopen(req, timeout=45) as r:
@@ -962,7 +964,8 @@ def main():
 
     try:
         while True:
-            time.sleep(2)
+            heartbeat("connected", {"nickname": wx.nickname})  # 定期刷新，面板才不会报"心跳停了"
+            time.sleep(15)
     except KeyboardInterrupt:
         pass
     finally:
