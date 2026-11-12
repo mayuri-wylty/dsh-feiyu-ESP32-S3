@@ -430,3 +430,36 @@ test('deps.reportError：错误写入 status.lastError 且脱敏 token', async (
   assert.ok(rows.some(([level, message]) => level === 'warn' && String(message).includes('LLM HTTP 401')), '应记录 warn 日志')
   await host.stop()
 })
+
+// ── T5：pipeline 健康 + 云 ASR 的 asrAvailable ──────────────────────────────
+test('status.pipeline：注入 getPipelineHealth 才出现；asr.ready 使 asrAvailable 为真', async () => {
+  const { factory } = makeFakeGateway()
+  const health = { asr: { primary: 'volcengine', fallback: '', ready: true, error: '' }, tts: { ready: true }, degraded: false, reason: '' }
+  const host = createEsp32Host({
+    getConfig: makeConfig(),
+    createGateway: factory,
+    createSession: makeFakeSessionFactory().factory,
+    getSpeechToText: () => null,
+    getPipelineHealth: () => health,
+  })
+  await host.start()
+  const status = host.status()
+  assert.deepEqual(status.pipeline, health)
+  assert.equal(status.asrAvailable, true)
+  await host.stop()
+})
+
+test('status：未注入 getPipelineHealth 时无 pipeline 字段，asrAvailable 保持旧行为', async () => {
+  const { factory } = makeFakeGateway()
+  const host = createEsp32Host({
+    getConfig: makeConfig(),
+    createGateway: factory,
+    createSession: makeFakeSessionFactory().factory,
+    getSpeechToText: () => null,
+  })
+  await host.start()
+  const status = host.status()
+  assert.equal('pipeline' in status, false)
+  assert.equal(status.asrAvailable, false)
+  await host.stop()
+})
