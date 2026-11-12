@@ -244,6 +244,32 @@ class Memory:
                     }, ensure_ascii=False) + "\n")
             except Exception:
                 pass
+        self._share(wxid, role, content)
+
+    def _share_set(self):
+        """共享名单：wechat.share_wxids（wxid 列表）+ owner.wechat。默认只有主人，不含陌生联系人。"""
+        cfg = load_config()
+        ids = set(str(x) for x in ((cfg.get("wechat") or {}).get("share_wxids") or []))
+        o = str((cfg.get("owner") or {}).get("wechat") or "").strip()
+        if o:
+            ids.add(o)
+        return ids
+
+    def _share(self, wxid, role, content):
+        """名单内联系人的对话同步一份到共享记忆 episodes.jsonl，其他通道（ESP32/QQ…）才能引用。
+        wechat.share_memory=false 整体关闭；名单外的联系人永远不共享（微信是工作渠道）。"""
+        try:
+            if (load_config().get("wechat") or {}).get("share_memory") is False:
+                return
+            if wxid not in self._share_set():
+                return
+            with open(EPISODES, "a", encoding="utf-8") as f:
+                f.write(json.dumps({
+                    "ts": int(time.time() * 1000), "platform": "wechat", "chatId": f"wechat:{wxid}",
+                    "userId": "owner", "role": role, "text": content, "summary": content[:120],
+                }, ensure_ascii=False) + "\n")
+        except Exception:
+            pass
 
     def recent(self, wxid, n):
         with self._lock:
