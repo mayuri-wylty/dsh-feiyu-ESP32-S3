@@ -52,7 +52,11 @@ $PypiIndex = 'https://mirrors.aliyun.com/pypi/simple/'
 # 上游 NapNeko/NapCatQQ 的 release 附件在本机网络下取不到；
 # fork XingYunStar/NapCatQQ 携带同名同版本附件（字节数一致），并在此固定 SHA256 防调包。
 $NapCatVersion = '4.18.42'
-$NapCatUrl     = "https://github.com/XingYunStar/NapCatQQ/releases/download/v$NapCatVersion/NapCat.Shell.Windows.Node.zip"
+# 下载源按顺序尝试：先自己仓库的 release 备份，再 fork；任何来源都必须通过下面的 SHA256 校验。
+$NapCatUrls    = @(
+    "https://github.com/mayuri-wylty/dsh-feiyu-ESP32-S3/releases/download/deps-napcat-v$NapCatVersion/NapCat.Shell.Windows.Node.zip",
+    "https://github.com/XingYunStar/NapCatQQ/releases/download/v$NapCatVersion/NapCat.Shell.Windows.Node.zip"
+)
 $NapCatSha256  = '77397ac38d66f46383e48f08f35d5f9d37ec575c22069f62d6c600e73b4521ed'
 $NapCatZip     = Join-Path $Cache 'NapCat.Shell.Windows.Node.zip'
 $NapCatDir     = Join-Path $Deps 'napcat'
@@ -245,11 +249,19 @@ function Install-NapCat {
         if ($Force -and (Test-Path -LiteralPath $NapCatZip)) { Remove-Item -LiteralPath $NapCatZip -Force }
         if (-not (Test-Path -LiteralPath $NapCatZip)) {
             if (-not (Test-Cmd 'curl.exe')) { throw '缺少 curl.exe，无法下载 NapCat。' }
-            Write-Host "    downloading $NapCatUrl"
-            $code = Invoke-Native -Exe 'curl.exe' -Show -Arguments @(
-                '-4', '--tlsv1.2', '-L', '-C', '-', '--retry', '5', '--retry-all-errors',
-                '-sS', '-o', $NapCatZip, $NapCatUrl)
-            if ($code -ne 0) { throw "NapCat 下载失败（curl 退出码 $code）：$NapCatUrl" }
+            $done = $false
+            foreach ($url in $NapCatUrls) {
+                Write-Host "    downloading $url"
+                $code = Invoke-Native -Exe 'curl.exe' -Show -Arguments @(
+                    '-4', '--tlsv1.2', '-L', '-C', '-', '--retry', '5', '--retry-all-errors',
+                    '-sS', '-o', $NapCatZip, $url)
+                if ($code -eq 0 -and (Test-Path -LiteralPath $NapCatZip) -and (Get-Sha256 $NapCatZip) -eq $NapCatSha256) {
+                    $done = $true; break
+                }
+                Write-Warn "该来源失败或校验不符（curl 退出码 $code），换下一个"
+                if (Test-Path -LiteralPath $NapCatZip) { Remove-Item -LiteralPath $NapCatZip -Force }
+            }
+            if (-not $done) { throw "NapCat 所有下载源均失败：$($NapCatUrls -join ' ; ')" }
         } else {
             Write-Skip "压缩包已缓存：$NapCatZip"
         }
