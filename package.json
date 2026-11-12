@@ -19,6 +19,9 @@
     "sticker"
   ],
   "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
   "main": "lib/index.js",
   "exports": {
     ".": "./lib/index.js",
