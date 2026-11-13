@@ -30,6 +30,7 @@ const TESTS = [
   'recall-push-test.mjs',
   'imggen-test.mjs',
   'vision-test.mjs',
+  'connections-douyin-test.mjs',
   'ledger-test.mjs',
   'comment-engage-test.mjs',
   'reply-style-test.mjs',
