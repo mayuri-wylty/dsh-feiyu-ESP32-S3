@@ -140,6 +140,9 @@ textarea.fy-input{width:100%;min-height:136px;resize:vertical;line-height:1.65;f
 .fy-chip{font-size:12px;padding:4px 10px;border-radius:999px;background:var(--dsw-alias-bg-l2,color-mix(in srgb,currentColor 6%,transparent));
   border:1px solid var(--dsw-alias-border-l2,color-mix(in srgb,currentColor 10%,transparent))}
 .fy-chip b{font-weight:600}
+.fy-chip.ok{color:#2e9e5b}
+.fy-chip.warn{color:#c9883a}
+.fy-conn-qr{width:160px;height:160px;border-radius:8px;background:#fff;object-fit:contain}
 .fy-chip.bad{color:var(--dsw-alias-label-secondary,#8b95a5)}
 .fy-dot{display:inline-block;width:6px;height:6px;border-radius:50%;margin-right:6px;vertical-align:1px;background:#3fbf6f}
 .fy-dot.off{background:#c9564d}
@@ -209,6 +212,211 @@ textarea.fy-input{width:100%;min-height:136px;resize:vertical;line-height:1.65;f
 				disabled: props.disabled,
 				onClick: () => props.onChange(!props.on),
 			}, h("i"));
+		}
+
+		// ── 连接中心（契约：docs/2026-11-12-connection-center-contract.md）─────────
+		const CONN_API = {
+			list: "/connections",
+			check: "/connections/check",
+			qrcode: "/qq/qrcode",
+			douyinLogin: "/douyin/login",
+			cookie: "/cookie",
+		};
+		const CONN_LABELS = { bilibili: "B站", douyin: "抖音", qq: "QQ", wechat: "微信", esp32: "ESP32" };
+
+		// 纯函数：契约 GET /connections → 每平台一行摘要。loggedIn:null = 未探测（unknown），不是未登录。
+		function deriveConnections(raw) {
+			const r = raw && typeof raw === "object" ? raw : {};
+			const row = (id, state, summary) => ({ id: id, label: CONN_LABELS[id], state: state, summary: summary });
+			const out = [];
+
+			const b = r.bilibili || {};
+			if (b.loggedIn === true) out.push(row("bilibili", "ok", "已登录" + (b.name ? "：" + b.name : "") + (b.mid ? "（" + b.mid + "）" : "")));
+			else if (b.loggedIn === false) out.push(row("bilibili", "warn", "未登录或 cookie 失效" + (b.error ? "：" + b.error : "")));
+			else out.push(row("bilibili", "unknown", "未检测" + (b.configured === false ? "（还没填 cookie）" : "")));
+
+			const d = r.douyin || {};
+			const dl = d.login || {};
+			if (dl.state === "waiting") out.push(row("douyin", "warn", "等待扫码登录"));
+			else if (d.loggedIn === true) out.push(row("douyin", "ok", "已登录" + (d.nickname ? "：" + d.nickname : "")));
+			else if (d.loggedIn === false) {
+				const why = d.error || (dl.state === "error" ? dl.error : "");
+				out.push(row("douyin", d.configured && why ? "warn" : "off", "未登录" + (why ? "：" + why : "")));
+			} else out.push(row("douyin", "unknown", "未检测"));
+
+			const q = r.qq || {};
+			if (!(q.gateway && q.gateway.ok)) out.push(row("qq", "off", "网关未启动"));
+			else if (q.loggedIn === true) out.push(row("qq", "ok", "已登录：" + (q.nickname || "") + (q.uin ? "（" + q.uin + "）" : "")));
+			else if (q.loggedIn === false) out.push(row("qq", "warn", "网关在线但未登录" + (q.error ? "：" + q.error : "")));
+			else out.push(row("qq", "unknown", "未检测"));
+
+			const w = r.wechat || {};
+			out.push(w.alive ? row("wechat", "ok", "运行中") : row("wechat", "off", "未运行"));
+
+			const e = r.esp32 || {};
+			if (e.running === true) out.push(row("esp32", "ok", "通道运行中" + (Array.isArray(e.devices) ? "，在线设备 " + e.devices.length : "")));
+			else if (e.enabled === false) out.push(row("esp32", "off", "未启用"));
+			else if (e.enabled === true) out.push(row("esp32", "warn", "已启用但没在跑"));
+			else out.push(row("esp32", "unknown", "未检测"));
+			return out;
+		}
+
+		// 抖音扫码登录状态机：start 后每 2s GET，ok/timeout/error 即停；stop()（卸载）即停。
+		// 依赖全部注入，纯逻辑可独立测试。
+		function createLoginFlow(opts) {
+			const call = opts.call, onState = opts.onState;
+			const schedule = opts.schedule || setTimeout, clear = opts.clear || clearTimeout;
+			const intervalMs = opts.intervalMs || 2000;
+			let timer = null, dead = false, gen = 0;
+			const halt = () => { gen++; if (timer != null) { clear(timer); timer = null; } };
+			const errState = (e) => ({ state: "error", error: (e && e.message) || String(e) });
+			const arm = (g) => {
+				timer = schedule(async () => {
+					timer = null;
+					if (dead || g !== gen) return;
+					let r;
+					try { r = await call(CONN_API.douyinLogin); } catch (e) { r = errState(e); }
+					if (dead || g !== gen) return;
+					onState(r);
+					if (r.state === "waiting") arm(g);
+				}, intervalMs);
+			};
+			return {
+				watch() { if (dead) return; halt(); arm(gen); },
+				async start() {
+					if (dead) return;
+					halt();
+					const g = gen;
+					let r;
+					try { r = await call(CONN_API.douyinLogin, { method: "POST", body: JSON.stringify({ action: "start" }) }); } catch (e) { r = errState(e); }
+					if (dead || g !== gen) return;
+					onState(r);
+					if (r.state === "waiting") arm(g);
+				},
+				async cancel() {
+					halt();
+					let r;
+					try { r = await call(CONN_API.douyinLogin, { method: "POST", body: JSON.stringify({ action: "cancel" }) }); } catch (e) { r = errState(e); }
+					if (!dead) onState(r);
+				},
+				stop() { dead = true; halt(); },
+			};
+		}
+
+		function ConnectionCenter() {
+			const [raw, setRaw] = useState(null);
+			const [unavailable, setUnavailable] = useState(false);
+			const [err, setErr] = useState("");
+			const [busy, setBusy] = useState("");
+			const [qr, setQr] = useState(null);
+			const [login, setLogin] = useState(null);
+			const [ck, setCk] = useState({ sessdata: "", bili_jct: "", buvid3: "" });
+			const [msg, setMsg] = useState(null);
+			const flowRef = useRef(null);
+			const alive = useRef(true);
+
+			const fail = (e) => {
+				const m = (e && e.message) || String(e);
+				if ((e && (e.status === 404 || e.status === 405)) || /404|405|not found|no route/i.test(m)) setUnavailable(true);
+				else setErr(m);
+			};
+			const loadQr = useCallback(async () => {
+				try {
+					const q = await api(CONN_API.qrcode);
+					if (alive.current) setQr(q);
+				} catch (e) { /* 二维码只是附属信息 */ }
+			}, []);
+			const load = useCallback(async () => {
+				try {
+					const j = await apiRetry(CONN_API.list);
+					if (!alive.current) return;
+					setRaw(j); setUnavailable(false); setErr("");
+					const dl = j.douyin && j.douyin.login;
+					if (dl) {
+						setLogin(dl);
+						if (dl.state === "waiting" && flowRef.current) flowRef.current.watch();
+					}
+					if (j.qq && j.qq.qr && j.qq.qr.exists) loadQr();
+				} catch (e) { if (alive.current) fail(e); }
+			}, []);
+
+			if (!flowRef.current) {
+				flowRef.current = createLoginFlow({
+					call: api,
+					onState: (r) => { if (alive.current) { setLogin(r); if (r && r.state === "ok") load(); } },
+				});
+			}
+			useEffect(() => {
+				alive.current = true;
+				load();
+				return () => { alive.current = false; flowRef.current.stop(); };
+			}, []);
+
+			const check = async (target) => {
+				setBusy("check:" + target); setMsg(null);
+				try {
+					const j = await api(CONN_API.check, { method: "POST", body: JSON.stringify({ target: target }) });
+					if (!alive.current) return;
+					setRaw((prev) => Object.assign({}, prev || {}, { [target]: j.result || (prev || {})[target] }));
+					if (target === "qq") loadQr();
+				} catch (e) { if (alive.current) setMsg({ err: true, text: CONN_LABELS[target] + " 检测失败：" + ((e && e.message) || e) }); }
+				finally { if (alive.current) setBusy(""); }
+			};
+			const saveCookie = async () => {
+				setBusy("cookie"); setMsg(null);
+				try {
+					await api(CONN_API.cookie, { method: "POST", body: JSON.stringify({ sessdata: ck.sessdata.trim(), bili_jct: ck.bili_jct.trim(), buvid3: ck.buvid3.trim() }) });
+					if (!alive.current) return;
+					setCk({ sessdata: "", bili_jct: "", buvid3: "" });
+					setMsg({ text: "B站 cookie 已保存" });
+					await load();
+				} catch (e) { if (alive.current) setMsg({ err: true, text: "保存失败：" + ((e && e.message) || e) }); }
+				finally { if (alive.current) setBusy(""); }
+			};
+
+			const rows = deriveConnections(raw || {});
+			const by = {};
+			rows.forEach((x) => { by[x.id] = x; });
+			const chip = (id) => h("div", { className: "fy-chip" + (by[id].state === "ok" ? " ok" : by[id].state === "warn" ? " warn" : " bad") },
+				h("b", null, by[id].summary));
+			const recheck = (t) => h("button", { className: "fy-btn", disabled: !!busy, onClick: () => check(t) },
+				busy === "check:" + t ? "检测中…" : "重新检测");
+			const ls = (login && login.state) || "idle";
+			const qq = (raw && raw.qq) || {};
+			const setField = (k) => (ev) => { const v = ev.target.value; setCk((c) => Object.assign({}, c, { [k]: v })); };
+			const pwd = (k, ph) => h("input", { className: "fy-input fy-w-md", type: "password", autoComplete: "off", placeholder: ph, value: ck[k], onChange: setField(k) });
+
+			if (unavailable) {
+				return h(Card, { title: "连接中心" }, h("div", { className: "fy-notice err" }, "后端未提供，请重启 DSH"));
+			}
+			return h(Card, { title: "连接中心", extra: h("button", { className: "fy-btn", onClick: load, disabled: !!busy }, "刷新") },
+				err ? h("div", { className: "fy-notice err" }, "连接状态读取失败：" + err) : null,
+				msg ? h("div", { className: "fy-notice" + (msg.err ? " err" : "") }, msg.text) : null,
+
+				h(Row, { label: "B站" }, chip("bilibili"), recheck("bilibili")),
+				h(Row, { label: "cookie" }, pwd("sessdata", "SESSDATA"), pwd("bili_jct", "bili_jct"), pwd("buvid3", "buvid3"),
+					h("button", { className: "fy-btn primary", disabled: busy === "cookie" || !(ck.sessdata.trim() && ck.bili_jct.trim()), onClick: saveCookie },
+						busy === "cookie" ? "保存中…" : "保存 cookie")),
+
+				h(Row, { label: "抖音" }, chip("douyin"),
+					ls === "waiting"
+						? h("button", { className: "fy-btn", onClick: () => flowRef.current.cancel() }, "取消")
+						: h("button", { className: "fy-btn primary", onClick: () => flowRef.current.start() }, "扫码登录"),
+					recheck("douyin")),
+				ls === "waiting" ? h("div", { className: "fy-hint" }, "请在弹出的 Chrome 里扫码，剩余 " + (login.remainingSec != null ? login.remainingSec : "?") + " 秒") : null,
+				ls === "timeout" ? h("div", { className: "fy-notice err" }, "扫码超时，请重新点「扫码登录」") : null,
+				ls === "error" ? h("div", { className: "fy-notice err" }, "登录失败：" + ((login && login.error) || "未知错误")) : null,
+
+				h(Row, { label: "QQ" }, chip("qq"), recheck("qq"),
+					h("button", { className: "fy-btn", onClick: loadQr }, "刷新二维码")),
+				qq.qr && qq.qr.exists && qr && qr.dataUrl
+					? h("div", { className: "fy-row" },
+						h("img", { className: "fy-conn-qr", src: qr.dataUrl, alt: "QQ 登录二维码" }),
+						h("span", { className: "fy-hint" }, qr.expired ? "二维码已过期，点「刷新二维码」" : "用手机 QQ 扫码登录（二维码 " + (qr.ageSec != null ? qr.ageSec : "?") + " 秒前生成）"))
+					: null,
+
+				h(Row, { label: "微信" }, chip("wechat")),
+				h(Row, { label: "ESP32" }, chip("esp32")));
 		}
 
 		// ── ESP32 第五通道卡片（T24）──────────────────────────────────────────
@@ -850,6 +1058,9 @@ textarea.fy-input{width:100%;min-height:136px;resize:vertical;line-height:1.65;f
 						h("div", { className: "fy-sub" }, "她按作息自己醒：B站/抖音定时，QQ/微信随时回你"))),
 
 				notice ? h("div", { className: "fy-notice" + (notice.err ? " err" : "") }, notice.msg) : null,
+
+				// 连接中心
+				h(ConnectionCenter, null),
 
 				// 运行状态
 				h(Card, {
@@ -1585,6 +1796,7 @@ textarea.fy-input{width:100%;min-height:136px;resize:vertical;line-height:1.65;f
 		exports.name = name;
 		exports.inject = inject;
 		exports.apply = apply;
+		exports.__test = { CONN_API: CONN_API, deriveConnections: deriveConnections, createLoginFlow: createLoginFlow };
 		return module.exports;
 	},
 });

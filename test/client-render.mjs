@@ -237,7 +237,7 @@ const inputsOf = (root) => collect2(root, (n) => n.type === 'input')
 
 assert.ok(text.includes('大脑（LLM）'), 'DSH 面板缺少「大脑（LLM）」卡片（应在主人与音色之间）')
 assert.ok(text.includes('接口地址') && text.includes('模型'), '大脑卡片缺少接口地址/模型')
-const keyInput = inputsOf(tree).find((n) => n.props.type === 'password')
+const keyInput = inputsOf(tree).find((n) => n.props.type === 'password' && !['SESSDATA', 'bili_jct', 'buvid3'].includes(n.props.placeholder))
 assert.ok(keyInput, '应有 password 类型的 API Key 输入')
 assert.equal(keyInput.props.value, '', 'Key 不得回显（保存后后端也不回传明文）')
 assert.ok(String(keyInput.props.placeholder).includes('未配置'), '未配置时 placeholder 应提示未配置')
@@ -256,7 +256,7 @@ const post = fetchPosts.find((p) => p.url === '/dsh-feiyu/api/config' && String(
 assert.ok(post, '保存 Key 应 POST /config')
 assert.deepEqual(JSON.parse(post.body), { llm: { api_key: 'sk-test' } }, 'Key 应 trim 后只放 llm.api_key')
 assert.ok(!JSON.stringify(tree).includes('sk-test'), 'Key 不得留在渲染树/面板状态里')
-const keyAfter = inputsOf(tree).find((n) => n.props.type === 'password')
+const keyAfter = inputsOf(tree).find((n) => n.props.type === 'password' && !['SESSDATA', 'bili_jct', 'buvid3'].includes(n.props.placeholder))
 assert.equal(keyAfter.props.value, '', '保存后 Key 输入框应清空')
 assert.ok(String(keyAfter.props.placeholder).includes('已配置'), '保存后应显示已配置')
 
@@ -320,4 +320,118 @@ for (const must of ['语音识别（ASR）', '语音合成（TTS）', '测试连
 }
 assert.ok(!/"apiKey"\s*:/.test(JSON.stringify(provTree)), '渲染树不得携带 apiKey 字段')
 
-console.log('client-render ✓  渲染通过：9 个区块 · 4 个平台开关 · 大脑（LLM）卡片 · ESP32 卡片（正常态 + 空状态）· 请求', fetchCalls.length, '次')
+// ── 连接中心（T4）：以 test/fixtures/connections.json 四种状态为准 ─────────────
+const fs = await import('node:fs')
+const FX = JSON.parse(fs.readFileSync(path.join(root, 'test/fixtures/connections.json'), 'utf8'))
+const CT = mod.__test
+assert.ok(CT && CT.CONN_API && CT.deriveConnections && CT.createLoginFlow, 'client.js 应通过 exports.__test 暴露连接中心纯函数')
+const renderConn = async (fx) => {
+  RESPONSES['/dsh-feiyu/api/connections'] = fx
+  RESPONSES['/dsh-feiyu/api/qq/qrcode'] = { ok: true, exists: true, ageSec: fx.qq.qr.ageSec, expired: fx.qq.qr.expired, dataUrl: 'data:image/png;base64,AAAA' }
+  state.length = 0
+  effects.length = 0
+  fetchCalls = []
+  fetchPosts = []
+  await rerender()
+  return tree
+}
+const btnsOf = (t) => collect(t, (n) => n.type === 'button').map((n) => (n.children || []).join(''))
+const ckInputs = (t) => inputsOf(t).filter((n) => ['SESSDATA', 'bili_jct', 'buvid3'].includes(n.props.placeholder))
+
+// loggedOut：全部「未检测/未登录」，有二维码图，有扫码登录按钮
+let ct = await renderConn(FX.loggedOut)
+let ctext = allText(ct)
+for (const must of ['连接中心', '未检测（还没填 cookie）', '网关未启动', '未运行', '重新检测', '扫码登录', '刷新二维码', '保存 cookie']) {
+  assert.ok(ctext.includes(must), '连接中心(loggedOut)缺少：' + must)
+}
+assert.ok(fetchCalls.includes('/dsh-feiyu/api/connections'), '面板打开应拉一次 /connections')
+assert.ok(!fetchCalls.some((u) => u.includes('/connections/check')), '打开面板不得自动触发 check')
+assert.ok(collect(ct, (n) => n.type === 'img' && n.props.src === 'data:image/png;base64,AAAA').length === 1, '应渲染二维码 <img>')
+const cks = ckInputs(ct)
+assert.equal(cks.length, 3, 'cookie 应有三个输入')
+assert.ok(cks.every((n) => n.props.type === 'password' && n.props.value === ''), 'cookie 输入必须 password 且为空')
+
+// 提交 cookie：POST /cookie，成功后输入清空且不回显
+cks[0].props.onChange({ target: { value: 'sess-SECRET' } })
+await rerender()
+ckInputs(tree)[1].props.onChange({ target: { value: 'jct-SECRET' } })
+await rerender()
+assert.ok(!JSON.stringify(tree).includes('SECRET') || ckInputs(tree).every((n) => n.props.type === 'password'), 'cookie 仅存在于 password 输入')
+const saveCk = collect(tree, (n) => n.type === 'button').find((n) => (n.children || []).includes('保存 cookie'))
+await saveCk.props.onClick()
+await rerender()
+const ckPost = fetchPosts.find((p) => p.url === '/dsh-feiyu/api/cookie')
+assert.ok(ckPost && JSON.parse(ckPost.body).sessdata === 'sess-SECRET', '应 POST /cookie')
+assert.ok(ckInputs(tree).every((n) => n.props.value === ''), '提交后 cookie 输入应清空')
+assert.ok(!JSON.stringify(tree).includes('SECRET'), 'cookie 不得留在渲染树')
+
+// 重新检测：POST /connections/check {target}
+const recheckQq = collect(tree, (n) => n.type === 'button' && (n.children || []).includes('重新检测'))[2]
+await recheckQq.props.onClick()
+assert.deepEqual(JSON.parse(fetchPosts.find((p) => p.url.endsWith('/connections/check')).body), { target: 'qq' })
+
+// loggedIn
+ct = await renderConn(FX.loggedIn)
+ctext = allText(ct)
+for (const must of ['已登录：测试用户（123456）', '已登录：抖音测试', '已登录：机器人（10001）', '运行中']) {
+  assert.ok(ctext.includes(must), '连接中心(loggedIn)缺少：' + must)
+}
+assert.equal(collect(ct, (n) => n.type === 'img').length, 0, '无二维码时不渲染 img')
+
+// probeFailed：错误原因可见，二维码过期提示
+ct = await renderConn(FX.probeFailed)
+ctext = allText(ct)
+for (const must of ['nav: -101 账号未登录', 'self-info 超时', '二维码已过期', '登录失败：Chrome 未能启动', 'get_login_info 超时']) {
+  assert.ok(ctext.includes(must), '连接中心(probeFailed)缺少：' + must)
+}
+
+// douyinWaiting：等待提示 + 取消按钮
+ct = await renderConn(FX.douyinWaiting)
+ctext = allText(ct)
+assert.ok(ctext.includes('请在弹出的 Chrome 里扫码，剩余 150 秒'), '应显示扫码倒计时')
+assert.ok(btnsOf(ct).includes('取消') && !btnsOf(ct).includes('扫码登录'), '等待中应显示取消而非扫码登录')
+
+// 后端未提供（404）→ 降级提示，不崩
+delete RESPONSES['/dsh-feiyu/api/connections']
+state.length = 0
+effects.length = 0
+await rerender()
+assert.ok(allText(tree).includes('后端未提供，请重启 DSH'), '404 应降级提示')
+assert.ok(!JSON.stringify(tree).includes('载入失败'), '连接中心 404 不得拖垮整页')
+
+// deriveConnections 纯函数
+const dv = CT.deriveConnections(FX.loggedOut)
+assert.deepEqual(dv.map((x) => x.id), ['bilibili', 'douyin', 'qq', 'wechat', 'esp32'])
+assert.equal(dv[0].state, 'unknown')
+assert.equal(dv[0].summary.startsWith('未检测'), true)
+assert.equal(CT.deriveConnections(FX.loggedIn).filter((x) => x.state === 'ok').length, 4)
+assert.equal(CT.deriveConnections(FX.probeFailed)[2].state, 'warn')
+assert.equal(CT.deriveConnections(null).length, 5, '空输入不抛错')
+
+// 抖音登录状态机：start 后轮询，ok 即停；stop 即停；cancel
+{
+  const calls = []
+  const seq = [{ state: 'waiting', remainingSec: 170 }, { state: 'waiting', remainingSec: 168 }, { state: 'ok' }, { state: 'ok' }]
+  const states = []
+  const timers = []
+  const flow = CT.createLoginFlow({
+    call: async (p, init) => { calls.push((init && init.method) || 'GET'); return p === CT.CONN_API.douyinLogin && init ? { state: 'waiting', remainingSec: 180 } : seq.shift() },
+    onState: (s) => states.push(s.state),
+    schedule: (fn) => { timers.push(fn); return timers.length },
+    clear: () => {},
+  })
+  await flow.start()
+  assert.deepEqual(calls, ['POST'])
+  for (let i = 0; i < 5 && timers.length; i++) { await timers.shift()() }
+  assert.deepEqual(states, ['waiting', 'waiting', 'waiting', 'ok'], '轮询到 ok 应停止')
+  assert.equal(timers.length, 0, 'ok 后不再排下一次')
+  const f2 = CT.createLoginFlow({ call: async () => ({ state: 'waiting' }), onState: () => states.push('x'), schedule: (fn) => { timers.push(fn); return 1 }, clear: () => {} })
+  await f2.start()
+  const pending = timers.shift()
+  f2.stop()
+  const before = states.length
+  await pending()
+  assert.equal(states.length, before, '卸载后不得再回调')
+}
+
+console.log('client-render ✓  渲染通过：9 个区块 · 4 个平台开关 · 大脑（LLM）卡片 · ESP32 卡片（正常态 + 空状态）· 连接中心（4 夹具 + 降级 + 登录状态机）· 请求', fetchCalls.length, '次')
