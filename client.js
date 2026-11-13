@@ -140,6 +140,11 @@ textarea.fy-input{width:100%;min-height:136px;resize:vertical;line-height:1.65;f
 .fy-chip{font-size:12px;padding:4px 10px;border-radius:999px;background:var(--dsw-alias-bg-l2,color-mix(in srgb,currentColor 6%,transparent));
   border:1px solid var(--dsw-alias-border-l2,color-mix(in srgb,currentColor 10%,transparent))}
 .fy-chip b{font-weight:600}
+.fy-group{display:flex;flex-direction:column;gap:10px}
+.fy-group-head{align-self:flex-start;background:transparent;border:0;padding:2px 0;font:inherit;font-size:13px;font-weight:600;color:inherit;cursor:pointer}
+.fy-group-body{flex-direction:column;gap:14px}
+.fy-group.sub .fy-group-head{font-size:12px;font-weight:500;color:var(--dsw-alias-label-secondary,#8b95a5);margin-top:6px}
+.fy-group.sub .fy-group-body{gap:0}
 .fy-chip.ok{color:#2e9e5b}
 .fy-chip.warn{color:#c9883a}
 .fy-conn-qr{width:160px;height:160px;border-radius:8px;background:#fff;object-fit:contain}
@@ -212,6 +217,15 @@ textarea.fy-input{width:100%;min-height:136px;resize:vertical;line-height:1.65;f
 				disabled: props.disabled,
 				onClick: () => props.onChange(!props.on),
 			}, h("i"));
+		}
+
+		// 可折叠分组：内容始终挂在树里，仅 display 切换（开关/输入状态不受折叠影响）
+		function Group(props) {
+			const [open, setOpen] = useState(!!props.defaultOpen);
+			return h("div", { className: "fy-group" + (props.sub ? " sub" : "") },
+				h("button", { type: "button", className: "fy-group-head", "aria-expanded": open ? "true" : "false", onClick: () => setOpen(!open) },
+					(open ? "▾ " : "▸ ") + props.title),
+				h("div", { className: "fy-group-body", style: { display: open ? "flex" : "none" } }, props.children));
 		}
 
 		// ── 连接中心（契约：docs/2026-11-12-connection-center-contract.md）─────────
@@ -746,6 +760,8 @@ textarea.fy-input{width:100%;min-height:136px;resize:vertical;line-height:1.65;f
 			const [notice, setNotice] = useState(null);
 			const [report, setReport] = useState("");
 			const timer = useRef(0);
+			const [conn, setConn] = useState(null);
+			useEffect(() => { api(CONN_API.list).then(setConn).catch(() => {}); }, []);
 
 			const flash = useCallback((msg, isErr) => {
 				setNotice({ msg: msg, err: !!isErr });
@@ -1046,6 +1062,8 @@ textarea.fy-input{width:100%;min-height:136px;resize:vertical;line-height:1.65;f
 			const beatAge = beat && beat.ts ? Math.max(0, Math.round((Date.now() - Number(beat.ts)) / 1000)) : null;
 			const beatFresh = beatAge !== null && beatAge <= 120;
 			const napcatQr = (status && status.napcatQr) || null;   // 网关在等扫码登录
+			const connBy = {};
+			deriveConnections(conn || {}).forEach((x) => { connBy[x.id] = conn ? x : Object.assign({}, x, { state: "unknown", summary: "未检测" }); });
 			const mood = (status && status.mood) || { value: 0, hunger: 0 };
 
 			return h("div", { className: "fy-panel" },
@@ -1061,6 +1079,8 @@ textarea.fy-input{width:100%;min-height:136px;resize:vertical;line-height:1.65;f
 
 				// 连接中心
 				h(ConnectionCenter, null),
+
+				h(Group, { title: "基础", defaultOpen: true },
 
 				// 运行状态
 				h(Card, {
@@ -1096,17 +1116,17 @@ textarea.fy-input{width:100%;min-height:136px;resize:vertical;line-height:1.65;f
 							"开 = 只打印不发送（她照常思考、算分、写日记）；关 = 真发。别和 douyin.dryRun 搞混，那个只管抖音。")),
 					// 通道健康：进程活着 ≠ 能收发。QQ 要看 NapCat 网关，微信要看心跳
 					h("div", { className: "fy-stats", style: { marginTop: 10 } },
-						h("div", { className: "fy-chip" + (napcatOk ? "" : " bad") },
-							h("span", { className: "fy-dot" + (napcatOk ? "" : " off") }),
-							"QQ 网关 ", h("b", null, napcatOk ? "在线" : "断开")),
+						h("div", { className: "fy-chip" + (connBy.qq.state === "ok" ? "" : " bad") },
+							h("span", { className: "fy-dot" + (connBy.qq.state === "ok" ? "" : " off") }),
+							"QQ ", h("b", null, connBy.qq.summary)),
 						h("div", { className: "fy-chip" + (svc && svc.qq && svc.qq.running ? "" : " bad") },
 							"QQ 进程 ", h("b", null, svc && svc.qq && svc.qq.running ? "在跑" : "没跑")),
-						h("div", { className: "fy-chip" + (beatFresh ? "" : " bad") },
-							"微信 ", h("b", null, beatAge === null ? "无心跳" : beatFresh ? beatAge + "s 前心跳 · " + (beat.state || "") : "心跳停了 " + beatAge + "s"))),
+						h("div", { className: "fy-chip" + (connBy.wechat.state === "ok" ? "" : " bad") },
+							"微信 ", h("b", null, connBy.wechat.summary))),
 					h("div", { className: "fy-row", style: { marginTop: 8, marginBottom: 0 } },
 						!napcatOk ? h("span", { className: "fy-hint", style: { marginTop: 0, flex: "1 1 260px" } },
 							napcatQr
-								? "📷 网关在等扫码登录：二维码 " + Math.max(1, Math.round(napcatQr.ageSec / 60)) + " 分钟前刚刷新，用手机 QQ 扫 D:\\NapCat\\cache\\qrcode.png。已开快速登录，正常只需要扫这一次。"
+								? "📷 网关在等扫码登录：二维码 " + Math.max(1, Math.round(napcatQr.ageSec / 60)) + " 分钟前刚刷新，请在上方「连接中心」扫码。已开快速登录，正常只需要扫这一次。"
 								: "⚠️ QQ 网关（NapCat）不通：服务在跑，但收不到也发不出任何 QQ 消息。点右边按钮，UAC 点一次「是」即可；网关随 DSH 启停。") : null,
 						!napcatOk ? h("button", {
 							className: "fy-btn primary",
@@ -1279,6 +1299,24 @@ textarea.fy-input{width:100%;min-height:136px;resize:vertical;line-height:1.65;f
 						}, busy === "sing" ? "唱着呢…" : "让她唱一首"),
 						h("span", { className: "fy-hint", style: { marginTop: 0 } }, "新音色：voice import --url … --name … --text … 导入后试听切换")),
 					h("div", { className: "fy-hint" }, "0~1，QQ/微信 每条回复走语音的概率（0.5 = 一半）。"),
+					h(Row, { label: "AI表情包" },
+						h(Switch, {
+							on: draft.aiSticker,
+							label: "aiSticker",
+							onChange: (v) => {
+								setDraft(Object.assign({}, draft, { aiSticker: v }));
+								save({ imageGen: Object.assign({ enabled: true, dailyMax: 30 }, cfg && cfg.imageGen, { enabled: v }) },
+									v ? "AI表情包已开：图库里没有的她会自己画一张入库补发" : "AI表情包已关（自制表情退回文字贴纸）");
+							},
+						}),
+						h("span", { className: "fy-hint", style: { marginTop: 0 } }, "图库没有的情绪 / 自制表情 → AI 画一张入库补发（QQ + B站图片评论共用，每天最多 30 张，走本机代理出网）"))),
+
+				),
+
+				h(Group, { title: "平台", defaultOpen: true },
+
+				// QQ 主动搭话（从音色卡移出）
+				h(Card, { title: "QQ 主动搭话", hint: "安静久了她会主动找你；正聊不打扰。" },
 					h(Row, { label: "主动搭话" },
 						h(Switch, {
 							on: draft.qqProactive,
@@ -1295,18 +1333,7 @@ textarea.fy-input{width:100%;min-height:136px;resize:vertical;line-height:1.65;f
 							onChange: (e) => setDraft(Object.assign({}, draft, { qqProactiveGap: e.target.value })),
 							onBlur: () => saveProactive({ minGapMin: Math.max(1, Number(draft.qqProactiveGap) || 150) }, "两次搭话最小间隔已保存（分钟，最小 1）"),
 						}),
-						h("span", { className: "fy-hint", style: { marginTop: 0 } }, "条/天 · 间隔分钟（正聊不打扰；夜间限制已关，全天可搭话）")),
-					h(Row, { label: "AI表情包" },
-						h(Switch, {
-							on: draft.aiSticker,
-							label: "aiSticker",
-							onChange: (v) => {
-								setDraft(Object.assign({}, draft, { aiSticker: v }));
-								save({ imageGen: Object.assign({ enabled: true, dailyMax: 30 }, cfg && cfg.imageGen, { enabled: v }) },
-									v ? "AI表情包已开：图库里没有的她会自己画一张入库补发" : "AI表情包已关（自制表情退回文字贴纸）");
-							},
-						}),
-						h("span", { className: "fy-hint", style: { marginTop: 0 } }, "图库没有的情绪 / 自制表情 → AI 画一张入库补发（QQ + B站图片评论共用，每天最多 30 张，走本机代理出网）"))),
+						h("span", { className: "fy-hint", style: { marginTop: 0 } }, "条/天 · 间隔分钟（正聊不打扰；夜间限制已关，全天可搭话）"))),
 
 				// 微信（UI 自动化，节奏与合并窗口直接决定像不像人、回得快不快）
 				h(Card, {
@@ -1546,7 +1573,7 @@ textarea.fy-input{width:100%;min-height:136px;resize:vertical;line-height:1.65;f
 						h("button", { className: "fy-btn", disabled: busy === "biliwatch", onClick: startBiliWatch },
 							busy === "biliwatch" ? "启动中…" : "静默刷一轮"),
 						h("span", { className: "fy-hint", style: { marginTop: 0 } }, "feed→深读→@评论（干跑/真发看 guard.dryRun）")),
-					h("div", { className: "fy-sub", style: { marginTop: 10 } }, "自由刷 · 大肥鱼自己逛"),
+					h(Group, { sub: true, title: "自由刷 · 大肥鱼自己逛", defaultOpen: false },
 					h(Row, { label: "自由刷" },
 						h(Switch, {
 							on: draft.biliFreeRoam,
@@ -1582,7 +1609,8 @@ textarea.fy-input{width:100%;min-height:136px;resize:vertical;line-height:1.65;f
 							onBlur: () => save({ bilibili: { freeRoam: { maxMinutes: Number(draft.biliMaxMinutes) || 0 } } }, "B站自由刷时长已保存"),
 						}),
 						h("span", { className: "fy-hint", style: { marginTop: 0 } }, "分钟，0 = 不限")),
-					h("div", { className: "fy-sub", style: { marginTop: 10 } }, "活人感 · 写通道（养好号再开，每项有日额度）"),
+					),
+					h(Group, { sub: true, title: "活人感 · 写通道（养好号再开，每项有日额度）", defaultOpen: false },
 					h(Row, { label: "弹幕" },
 						h(Switch, {
 							on: draft.dykDanmaku,
@@ -1663,7 +1691,11 @@ textarea.fy-input{width:100%;min-height:136px;resize:vertical;line-height:1.65;f
 							label: "dykFollow",
 							onChange: (v) => { setDraft(Object.assign({}, draft, { dykFollow: v })); save({ bilibili: { follow: { enabled: v } } }, v ? "关注已开（好UP自己关注）" : "关注已关"); },
 						}),
-						h("span", { className: "fy-hint", style: { marginTop: 0 } }, "社交图谱自己长"))),
+						h("span", { className: "fy-hint", style: { marginTop: 0 } }, "社交图谱自己长")))),
+
+				),
+
+				h(Group, { title: "高级", defaultOpen: false },
 
 // 完全自由（总开关）：她想干嘛就干嘛——上网/刷B站/刷抖音/做视频/写代码/玩/歇着，额度系统把关，微信不受影响
 				h(Card, {
@@ -1776,6 +1808,8 @@ textarea.fy-input{width:100%;min-height:136px;resize:vertical;line-height:1.65;f
 								h("span", { className: "fy-tag" }, String(e.chatId || "").split(":")[0] || e.platform || "?"),
 								short(e.text, 96)))
 							: h("div", { className: "fy-mem-item" }, "还没有记忆 —— 她醒过之后会开始记"))),
+
+				),
 
 				// 页脚
 				h("div", { className: "fy-hint", style: { paddingLeft: 2 } },

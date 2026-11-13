@@ -434,4 +434,24 @@ assert.equal(CT.deriveConnections(null).length, 5, '空输入不抛错')
   assert.equal(states.length, before, '卸载后不得再回调')
 }
 
+// ── T5：分组折叠 + 主动搭话迁移 + 状态 chip 读 /connections ────────────────────
+{
+  const gt = await renderConn(FX.loggedIn)
+  const groups = collect(gt, (n) => n.props.className === 'fy-group')
+  const heads = collect(gt, (n) => n.type === 'button' && String(n.props.className || '') === 'fy-group-head').map((n) => (n.children || []).join(''))
+  assert.ok(heads.some((x) => x.includes('基础') && x.startsWith('▾')), '基础默认展开')
+  assert.ok(heads.some((x) => x.includes('平台') && x.startsWith('▾')), '平台默认展开')
+  assert.ok(heads.some((x) => x.includes('高级') && x.startsWith('▸')), '高级默认折叠')
+  assert.equal(collect(gt, (n) => String(n.props.className || '').includes('fy-switch')).length, 33, '折叠不影响开关总数（31 + ESP32 providers 块在后段 fixture 下多出的 2 个）')
+  assert.ok(allText(groups.find((g) => (g.children[0].children || []).join('') === '▾ 平台')).includes('QQ 主动搭话'), '主动搭话应在平台组')
+  assert.ok(!allText(groups.find((g) => allText(g).includes('当前音色'))).includes('主动搭话') || allText(groups.find((g) => allText(g).includes('当前音色'))).indexOf('QQ 主动搭话') === -1, '主动搭话不应在音色卡')
+  assert.ok(!allText(gt).includes('NapCat\\cache'), '不再写死二维码路径')
+  delete RESPONSES['/dsh-feiyu/api/connections']
+  state.length = 0
+  effects.length = 0
+  await rerender()
+  const noConn = allText(tree)
+  assert.ok(noConn.includes('未检测') && !noConn.includes('已接入'), '拿不到 /connections 时显示未检测')
+}
+
 console.log('client-render ✓  渲染通过：9 个区块 · 4 个平台开关 · 大脑（LLM）卡片 · ESP32 卡片（正常态 + 空状态）· 连接中心（4 夹具 + 降级 + 登录状态机）· 请求', fetchCalls.length, '次')
