@@ -453,7 +453,7 @@ textarea.fy-input{width:100%;min-height:136px;resize:vertical;line-height:1.65;f
 			["ttsFirstMs", "TTS首帧"], ["totalMs", "总耗时"],
 		];
 
-		// ── ESP32 云端 ASR / TTS 配置（动态表单，来源 GET /esp32/providers；与 settings.html 行为一致）──
+		// ── ESP32 云端 ASR / TTS 配置（动态表单，来源 GET /esp32/providers）──
 		const PROV_KIND_LABEL = { asr: "语音识别（ASR）", tts: "语音合成（TTS）" };
 
 		function provInitForm(meta, saved) {

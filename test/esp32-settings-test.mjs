@@ -1,15 +1,12 @@
 // 设置页 / DSH 面板「ESP32 云端 ASR/TTS」配置块契约测试（T8/T9）
 //
-// settings.html 与 client.js 没有可注入的模块边界，但其中的纯函数
+// client.js 没有可注入的模块边界（settings.html 已废弃），但其中的纯函数
 // （buildProviderTestBody / provInitForm / describeTestResult / describePipeline）可抽出来在 vm 里真跑；
-// 两处实现必须行为一致，所以同一组用例跑两遍。
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import fs from 'node:fs'
 import vm from 'node:vm'
 
-const html = fs.readFileSync(new URL('../lib/settings.html', import.meta.url), 'utf8')
-const script = (html.match(/<script>([\s\S]*?)<\/script>/) || [])[1] || ''
 const clientSrc = fs.readFileSync(new URL('../client.js', import.meta.url), 'utf8')
 
 function extract(src, name, indent) {
@@ -27,7 +24,6 @@ function load(src, indent) {
 }
 
 const impls = {
-  'settings.html': load(script, ''),
   'client.js': load(clientSrc, '\t\t'),
 }
 
@@ -83,27 +79,7 @@ for (const [where, fns] of Object.entries(impls)) {
 }
 
 // ── 页面契约 ──────────────────────────────────────────────────────────────
-test('settings.html：ASR/TTS 容器、状态区、API 调用与默认勾选', () => {
-  for (const id of ['esp32_asr_block', 'esp32_tts_block', 'esp32_pipeline', 'esp32_degraded']) {
-    assert.match(html, new RegExp(`id="${id}"`), `缺少 #${id}`)
-  }
-  assert.match(script, /apiRetry\('\/esp32\/providers'\)/)
-  assert.match(script, /api\('\/esp32\/providers\/test',\s*\{\s*method:\s*'POST'/)
-  assert.match(script, /id="esp32_\$\{kind\}_auto" checked/, '「通过后自动启用为主」默认开')
-  assert.match(script, /已保存，留空保持不变/)
-  assert.match(script, /测试连接/)
-  assert.match(script, /仅保存/)
-  assert.match(script, /loadEsp32Providers\(\);/, 'boot 应加载 providers')
-})
-
-test('settings.html：仅保存走 POST /config 的 esp32 段，且不带 persist', () => {
-  const fn = extract(script, 'provSave', '')
-  assert.match(fn, /api\('\/config'/)
-  assert.match(fn, /\{ esp32: \{ \[kind\]: \{ \[ks\.meta\.configKey\]: body\.values \} \} \}/)
-  assert.match(fn, /buildProviderTestBody\(kind, ks\.meta, ks\.form, false\)/)
-})
-
-test('client.js：Esp32Providers 挂进 ESP32 卡片，行为与 settings.html 对齐', () => {
+test('client.js：Esp32Providers 挂进 ESP32 卡片', () => {
   assert.match(clientSrc, /h\(Esp32Providers,/)
   assert.match(clientSrc, /apiRetry\("\/esp32\/providers"\)/)
   assert.match(clientSrc, /api\("\/esp32\/providers\/test",\s*\{\s*method:\s*"POST"/)
@@ -111,7 +87,6 @@ test('client.js：Esp32Providers 挂进 ESP32 卡片，行为与 settings.html �
   assert.match(clientSrc, /auto: true/, '自动启用默认开')
 })
 
-test('两处都不回显密钥：密钥输入初始值恒为空串', () => {
-  assert.match(script, /if \(f\.secret\) \{ out\[f\.key\] = ''; continue; \}/)
+test('不回显密钥：密钥输入初始值恒为空串', () => {
   assert.match(clientSrc, /if \(f\.secret\) \{ out\[f\.key\] = ""; continue; \}/)
 })
