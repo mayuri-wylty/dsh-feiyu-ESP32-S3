@@ -1,0 +1,34 @@
+{
+  "loggedOut": {
+    "ok": true, "checkedAt": 1731400000000,
+    "bilibili": { "configured": false, "loggedIn": null, "mid": "", "name": "", "checkedAt": 0, "error": null },
+    "douyin": { "configured": false, "loggedIn": false, "nickname": "", "secUid": "", "cookieAgeSec": null, "checkedAt": 0, "error": null, "login": { "state": "idle" } },
+    "qq": { "gateway": { "ok": false, "url": "http://127.0.0.1:3000" }, "loggedIn": null, "uin": "", "nickname": "", "qr": { "exists": true, "ageSec": 20, "expired": false }, "error": null },
+    "wechat": { "alive": false, "ageSec": null },
+    "esp32": {}
+  },
+  "loggedIn": {
+    "ok": true, "checkedAt": 1731400000000,
+    "bilibili": { "configured": true, "loggedIn": true, "mid": "123456", "name": "测试用户", "checkedAt": 1731400000000, "error": null },
+    "douyin": { "configured": true, "loggedIn": true, "nickname": "抖音测试", "secUid": "MS4wLjABAAAA_test", "cookieAgeSec": 3600, "checkedAt": 1731400000000, "error": null, "login": { "state": "ok" } },
+    "qq": { "gateway": { "ok": true, "url": "http://127.0.0.1:3000" }, "loggedIn": true, "uin": "10001", "nickname": "机器人", "qr": { "exists": false, "ageSec": null, "expired": false }, "error": null },
+    "wechat": { "alive": true, "ageSec": 12 },
+    "esp32": {}
+  },
+  "probeFailed": {
+    "ok": true, "checkedAt": 1731400000000,
+    "bilibili": { "configured": true, "loggedIn": false, "mid": "", "name": "", "checkedAt": 1731400000000, "error": "nav: -101 账号未登录" },
+    "douyin": { "configured": true, "loggedIn": false, "nickname": "", "secUid": "", "cookieAgeSec": 999999, "checkedAt": 1731400000000, "error": "self-info 超时", "login": { "state": "error", "error": "Chrome 未能启动" } },
+    "qq": { "gateway": { "ok": true, "url": "http://127.0.0.1:3000" }, "loggedIn": false, "uin": "", "nickname": "", "qr": { "exists": true, "ageSec": 400, "expired": true }, "error": "get_login_info 超时" },
+    "wechat": { "alive": false, "ageSec": 900 },
+    "esp32": {}
+  },
+  "douyinWaiting": {
+    "ok": true, "checkedAt": 1731400000000,
+    "bilibili": { "configured": true, "loggedIn": true, "mid": "123456", "name": "测试用户", "checkedAt": 1731400000000, "error": null },
+    "douyin": { "configured": false, "loggedIn": false, "nickname": "", "secUid": "", "cookieAgeSec": null, "checkedAt": 0, "error": null, "login": { "state": "waiting", "startedAt": 1731400000000, "remainingSec": 150 } },
+    "qq": { "gateway": { "ok": true, "url": "http://127.0.0.1:3000" }, "loggedIn": true, "uin": "10001", "nickname": "机器人", "qr": { "exists": false, "ageSec": null, "expired": false }, "error": null },
+    "wechat": { "alive": true, "ageSec": 5 },
+    "esp32": {}
+  }
+}
