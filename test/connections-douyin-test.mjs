@@ -120,15 +120,25 @@ const mk = (spawn, extra = {}) => createDouyinConnection({ readConfig: () => cfg
   const c = sp.main()[0]
   assert.deepEqual(c.args, ['dy.py', 'self-info', '--cookie', cookieFile, '--out', '-'])
   c.stdout.emit('data', '[self-info] log line\n' + JSON.stringify({ ok: true, nickname: '昵称', sec_uid: 'MS4w', uid: '1' }) + '\n')
-  c.emit('exit', 0)
+  c.emit('close', 0)
   const r = await p1
   assert.equal(r.ok, true); assert.equal(r.result.nickname, '昵称'); assert.equal(r.result.secUid, 'MS4w'); assert.equal(r.result.error, null)
   assert.ok(r.result.checkedAt > 0)
   assert.equal(d.probeCheap().nickname, '昵称', 'cached')
   assert.ok(!JSON.stringify(r).includes(SECRET))
   // not busy anymore; failure path keeps no crash
-  const p2 = d.checkReal(); sp.main()[1].stdout.emit('data', '{"ok": false}\n'); sp.main()[1].emit('exit', 1)
+  const p2 = d.checkReal(); sp.main()[1].stdout.emit('data', '{"ok": false}\n'); sp.main()[1].emit('close', 1)
   const r2 = await p2; assert.equal(r2.ok, true); assert.ok(r2.result.error)
+  d.dispose()
+}
+
+// 旧 cookie 仍有效，用户直接关窗口：不能误判 ok
+{
+  writeCookie(goodCookie(Math.floor(Date.now() / 1000) + 9999))
+  const past = new Date(Date.now() - 60_000); fs.utimesSync(cookieFile, past, past)
+  const sp = makeSpawn(); const d = mk(sp)
+  d.loginStart(); sp.main()[0].emit('exit', 0)
+  assert.equal(d.loginStatus().state, 'error', 'stale cookie must not count as login ok')
   d.dispose()
 }
 
