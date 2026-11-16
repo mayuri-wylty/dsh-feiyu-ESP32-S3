@@ -275,12 +275,13 @@ const texts = (node, acc = []) => {
 
 // ── FreeBrowse 与旧两处（DouyinCard / BiliCard 内的自由刷代码）字段集合一致 ────
 {
-  const src = fs.readFileSync(clientPath, 'utf8')
+  // 旧代码来自 T4 重排前的冻结副本（test/fixtures/client-old-cards.txt = 171d079 的 DouyinCard + BiliCard）
+  const src = fs.readFileSync(path.join(root, 'test', 'fixtures', 'client-old-cards.txt'), 'utf8')
   const fnBody = (name) => {
     const a = src.indexOf('function ' + name + '(')
     assert.ok(a >= 0, '找不到旧组件 ' + name)
     const b = src.indexOf('// ===== ', a)
-    return src.slice(a, b)
+    return src.slice(a, b < 0 ? src.length : b)
   }
   const HEAD = '自由刷 · 大肥鱼自己逛'
   const oldSection = (name, endMark) => {
@@ -327,6 +328,7 @@ const texts = (node, acc = []) => {
       },
       toggleFreeRoam: (pl, v) => toggles.push(pl),
     }
+    resetHooks()
     const t = render(() => createElement(P.FreeBrowse, props))
     const renderReads = [...reads].filter((k) => k !== 'unrelated').sort()
     // 触发所有处理器：开关各按两个方向，输入框 onChange + onBlur
@@ -337,7 +339,12 @@ const texts = (node, acc = []) => {
     for (const sw of switches) sw.props.onClick()   // on=true → onChange(false)
     base[keys[0]] = false; base[keys[1]] = false
     for (const sw of collect(render(() => createElement(P.FreeBrowse, props)), (n) => n.type === 'button' && n.props.role === 'switch')) sw.props.onClick()   // on=false → onChange(true)
-    for (const inp of collect(t, (n) => n.type === 'input')) { inp.props.onChange({ target: { value: '7' } }); inp.props.onBlur() }
+    // 数值框（NumberField）本地缓冲：onChange 后需重渲染才能让 onBlur 看到输入值
+    const nInputs = collect(t, (n) => n.type === 'input').length
+    for (let i = 0; i < nInputs; i++) {
+      collect(render(() => createElement(P.FreeBrowse, props)), (n) => n.type === 'input')[i].props.onChange({ target: { value: '7' } })
+      collect(render(() => createElement(P.FreeBrowse, props)), (n) => n.type === 'input')[i].props.onBlur()
+    }
     const rows = collect(t, (n) => classes(n).includes('fy-row'))
     assert.equal(rows.length, 4, 'FreeBrowse 渲染 4 行')
 
@@ -345,7 +352,14 @@ const texts = (node, acc = []) => {
     assert.deepEqual(uniq([...writes]), oldWrite, platform + '：setDraft 写入的键集合应等于旧代码')
     assert.deepEqual(uniq(savedPaths), oldPaths, platform + '：save 路径集合应等于旧代码')
     assert.deepEqual(uniq(toggles), oldToggle, platform + '：toggleFreeRoam 平台参数应等于旧代码')
-    assert.deepEqual(uniq([...newText, ...msgs.filter((m) => CJK.test(String(m)))]), oldText, platform + '：标签/提示/保存提示语集合应等于旧代码')
+    // T4 重排：删掉所有灰字说明与旧"自由刷"行标签（改名"启用"），新增单位后缀「条」「分钟」；其余文案（保存提示语等）与旧代码一致
+    const newAll = uniq([...newText, ...msgs.filter((m) => CJK.test(String(m)))])
+    const removed = oldText.filter((x) => !newAll.includes(x))
+    const added = newAll.filter((x) => !oldText.includes(x))
+    assert.deepEqual(added, ['分钟', '启用', '条'], platform + '：新增文案只应是「启用」与单位后缀')
+    const hintRe = /开着就一直刷|自由选项|0 = 不限/
+    assert.deepEqual(removed.filter((x) => !hintRe.test(x)), ['自由刷'], platform + '：删掉的只应是说明句与旧行标签「自由刷」，实际：' + removed)
+    assert.ok(collect(t, (n) => classes(n).some((c) => c === 'fy-hint' || c === 'fy-sub' || c === 'fy-sw-desc')).length === 0, platform + '：FreeBrowse 不再产出灰字说明')
   }
 }
 
