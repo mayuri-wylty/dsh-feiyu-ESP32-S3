@@ -689,4 +689,164 @@ assert.equal(CT.deriveConnections(null).length, 5, '空输入不抛错')
   assert.ok(!JSON.stringify(tree).includes('fy-hint'), '整页没有 fy-hint')
 }
 
+// ── T7 评审修复：白名单（失焦/竞态/读失败/保存失败）· 刷新入口 · 未加载灰点 · QQ 间隔回写 · 无障碍 ───────────
+{
+  const origST = globalThis.setTimeout
+  const origFetch = globalThis.fetch
+  const settle = () => new Promise((r) => origST(r, 25))
+  const resetAll = async () => {
+    state.length = 0; effects.length = 0; fetchCalls = []; fetchPosts = []
+    await rerender(); await settle(); await rerender()
+  }
+  const esp = () => byId(tree, 'fy-esp32')
+  const alInput = () => inputsOf(esp()).find((n) => n.props['aria-label'] === 'allow-device')
+  const addBtn = () => collect(esp(), (n) => n.props['aria-label'] === '添加到白名单')[0]
+  const joinBtns = () => collect(esp(), (n) => String(n.props.className || '').includes('fy-esp32-join'))
+  const rmBtns = () => collect(esp(), (n) => String(n.props.className || '').includes('fy-esp32-wl-x'))
+  const wlPosts = () => fetchPosts.filter((p) => p.url === '/dsh-feiyu/api/config' && String(p.body).includes('allowDevices')).map((p) => JSON.parse(p.body).esp32.allowDevices)
+  const savedCfg = JSON.stringify(RESPONSES['/dsh-feiyu/api/config'].config.esp32)
+
+  // 2：失焦既不加入也不清空；回车 / 「＋」才加入
+  RESPONSES['/dsh-feiyu/api/config'].config.esp32 = { allowDevices: [] }
+  await resetAll()
+  assert.equal(alInput().props.onBlur, undefined, '白名单输入框不再挂 onBlur')
+  alInput().props.onChange({ target: { value: ' AA:BB:99 ' } })
+  await rerender()
+  assert.ok(addBtn(), '输入框旁有「＋」按钮')
+  assert.equal(alInput().props.value, ' AA:BB:99 ')
+  assert.equal(wlPosts().length, 0, '输入但未回车/点＋：不保存')
+  await addBtn().props.onClick()
+  await rerender()
+  assert.deepEqual(wlPosts(), [['aa:bb:99']], '点「＋」加入（trim + 小写）')
+  assert.equal(alInput().props.value, '', '加入成功后输入框清空')
+  assert.ok(addBtn().props.disabled, '输入为空时「＋」禁用')
+
+  // 3a：连续两次「加入」不互相吞掉（不等第一个返回就点第二个）
+  RESPONSES['/dsh-feiyu/api/config'].config.esp32 = { allowDevices: [] }
+  await resetAll()
+  fetchPosts.length = 0
+  const [j0, j1] = joinBtns()
+  const pa = j0.props.onClick()
+  const pb = j1.props.onClick()
+  await Promise.all([pa, pb])
+  await rerender()
+  assert.deepEqual(wlPosts(), [['aa:bb:cc'], ['aa:bb:cc', 'aa:bb:dd']], '第二次保存基于第一次落盘后的最新名单')
+  assert.equal(rmBtns().length, 2, '界面两个 chip 都在')
+
+  // 3b：白名单读取失败 → 禁用增删 + err 点，不当成空名单
+  RESPONSES['/dsh-feiyu/api/config'].config.esp32 = { allowDevices: ['aa:bb:ee'] }
+  let cfgGets = 0
+  globalThis.fetch = async (url, init) => {
+    if (url === '/dsh-feiyu/api/config' && !(init && init.method === 'POST')) {
+      cfgGets++
+      if (cfgGets > 1) return { ok: false, status: 500, text: async () => JSON.stringify({ ok: false, error: 'boom' }) }
+    }
+    return origFetch(url, init)
+  }
+  await resetAll()
+  assert.ok(alInput().props.disabled, '白名单没读到：输入框禁用')
+  assert.ok(addBtn().props.disabled, '白名单没读到：「＋」禁用')
+  assert.ok(joinBtns().length > 0 && joinBtns().every((b) => b.props.disabled), '白名单没读到：「加入白名单」禁用')
+  assert.ok(collect(byCls(esp(), 'fy-esp32-allow')[0], (n) => n.props.className === 'fy-dot-off').length === 1, '白名单读失败：err 点')
+  fetchPosts.length = 0
+  await joinBtns()[0].props.onClick()
+  await addBtn().props.onClick()
+  assert.equal(wlPosts().length, 0, '没读到之前点了也不保存（不会把空名单写回）')
+  // 恢复后点 ESP32 卡头刷新 → 读到并解禁
+  globalThis.fetch = origFetch
+  await collect(byCls(esp(), 'fy-card-head')[0], (n) => n.props['aria-label'] === '刷新')[0].props.onClick()
+  await settle(); await rerender()
+  assert.ok(!alInput().props.disabled, '刷新后读到白名单：解禁')
+  assert.equal(rmBtns().length, 1)
+
+  // 3c：保存失败 → 输入框红边框，不写进 ESP32 状态读取失败文案，也不加前缀句子
+  globalThis.fetch = async (url, init) => {
+    if (url === '/dsh-feiyu/api/config' && init && init.method === 'POST' && String(init.body).includes('allowDevices')) {
+      return { ok: false, status: 500, text: async () => JSON.stringify({ ok: false, error: 'disk full' }) }
+    }
+    return origFetch(url, init)
+  }
+  alInput().props.onChange({ target: { value: 'aa:bb:fe' } })
+  await rerender()
+  await addBtn().props.onClick()
+  await rerender()
+  globalThis.fetch = origFetch
+  assert.ok(String(alInput().props.className).includes('fy-input-err'), '保存失败：输入框红边框')
+  assert.ok(!allText(esp()).includes('ESP32 状态读取失败') && !allText(esp()).includes('白名单保存失败'), '保存失败不混进状态读取失败，也无前缀句')
+  assert.equal(alInput().props.value, 'aa:bb:fe', '保存失败不清空输入')
+  assert.equal(rmBtns().length, 1, '保存失败名单不变')
+  alInput().props.onChange({ target: { value: 'aa:bb:f' } })
+  await rerender()
+  assert.ok(!String(alInput().props.className).includes('fy-input-err'), '继续输入后红边框消失')
+  RESPONSES['/dsh-feiyu/api/config'].config.esp32 = JSON.parse(savedCfg)
+
+  // 4：状态条刷新 + /status、/services 读失败的 err 点；status 没读到时演练|真发无选中
+  const sbar = () => byCls(tree, 'fy-statusbar')[0]
+  const savedStatus = RESPONSES['/dsh-feiyu/api/status']
+  const savedSvc = RESPONSES['/dsh-feiyu/api/services']
+  delete RESPONSES['/dsh-feiyu/api/status']
+  delete RESPONSES['/dsh-feiyu/api/services']
+  globalThis.setTimeout = (fn, ms) => origST(fn, ms > 500 ? 5 : ms)
+  await resetAll()
+  await settle(); await settle(); await rerender()
+  assert.ok(byCls(sbar(), 'fy-seg-opt').every((n) => !hasCls(n, 'on')), 'status 未读到：演练|真发都不选中（真发不是红的）')
+  const errDot = byCls(sbar(), 'fy-dot-off').find((n) => /读取失败/.test(n.props.title || ''))
+  assert.ok(errDot && /运行状态读取失败/.test(errDot.props.title) && /服务读取失败/.test(errDot.props.title), '状态条 err 点的 title 带失败原因')
+  assert.ok(!allText(tree).includes('点「刷新」'), '读失败提示不再提及不存在的按钮')
+  // 刷新：重读 /status /services /connections，成功后 err 点消失、选中态出现
+  RESPONSES['/dsh-feiyu/api/status'] = savedStatus
+  RESPONSES['/dsh-feiyu/api/services'] = savedSvc
+  fetchCalls = []
+  const refreshBtn = collect(sbar(), (n) => n.props['aria-label'] === '刷新')[0]
+  assert.ok(refreshBtn, '状态条右端有「刷新」图标按钮')
+  await refreshBtn.props.onClick()
+  await settle(); await rerender()
+  for (const u of ['/dsh-feiyu/api/status', '/dsh-feiyu/api/services', '/dsh-feiyu/api/connections']) assert.ok(fetchCalls.includes(u), '刷新应重读 ' + u)
+  assert.ok(!byCls(sbar(), 'fy-dot-off').some((n) => /读取失败/.test(n.props.title || '')), '刷新成功后 err 点消失')
+  assert.ok(hasCls(byCls(sbar(), 'fy-seg-opt')[1], 'on'), 'status 读到后：dryRun=false → 真发选中')
+  assert.ok(collect(byCls(esp(), 'fy-card-head')[0], (n) => n.props['aria-label'] === '刷新').length === 1, 'ESP32 卡头有刷新图标')
+  globalThis.setTimeout = origST
+
+  // 5：/connections 没读到 → 状态条与卡头全灰点，不是红点「网关未启动 / 未运行」
+  const savedConn = RESPONSES['/dsh-feiyu/api/connections']
+  delete RESPONSES['/dsh-feiyu/api/connections']
+  await resetAll()
+  assert.deepEqual(byCls(sbar(), 'fy-sb-dot').map((n) => n.children[0].props.className), Array(5).fill('fy-dot-idle'), '未加载：状态条 5 点全灰')
+  for (const id of ['fy-ch-bili', 'fy-ch-douyin', 'fy-qq', 'fy-wechat']) {
+    assert.ok(byCls(byCls(byId(tree, id), 'fy-card-title')[0], 'fy-dot-idle').length === 1, id + ' 卡头灰点')
+  }
+  assert.ok(!allText(tree).includes('网关未启动') && !allText(tree).includes('未运行'), '未加载时不显示「网关未启动 / 未运行」')
+  assert.equal(CT.deriveConnections({}).filter((x) => x.state === 'unknown').length, 5, '空对象 = 全 unknown')
+  assert.equal(CT.deriveConnections({ qq: {}, wechat: { alive: false } }).filter((x) => x.id === 'qq' || x.id === 'wechat').map((x) => x.state).join(), 'off,off', '已加载的 qq/wechat 仍可为 off')
+  if (savedConn) RESPONSES['/dsh-feiyu/api/connections'] = savedConn
+
+  // 6：QQ 最小间隔输 0 → 落盘 150，draft/输入框同步成 150
+  await resetAll()
+  const qqNums = () => inputsOf(byId(tree, 'fy-qq')).filter((n) => n.props.type === 'number')
+  fetchPosts.length = 0
+  qqNums()[1].props.onChange({ target: { value: '0' } })
+  await rerender()
+  await qqNums()[1].props.onBlur()
+  await rerender()
+  const gapPost = fetchPosts.find((p) => String(p.body).includes('minGapMin'))
+  assert.deepEqual(JSON.parse(gapPost.body), { qq: { proactive: { minGapMin: 150 } } }, '输入 0 保存 150')
+  assert.equal(String(qqNums()[1].props.value), '150', '输入框显示与落盘值一致（150，不是 0）')
+
+  // 7：无障碍 —— 开关 aria-label 是可读中文标签（键名走 data-key），「不限」带所属标签，StatusDot 有 title/aria-label
+  const sws = collect(tree, (n) => n.type === 'button' && n.props.role === 'switch')
+  assert.ok(sws.length >= 39)
+  const readable = (n) => /[一-龥]/.test(n.props['aria-label'] || '') || n.props['aria-label'] === 'QQ'
+  assert.ok(sws.every(readable), '所有开关 aria-label 可读：' + sws.filter((n) => !readable(n)).map((n) => n.props['aria-label']))
+  assert.ok(sws.every((n) => !/^[a-z][A-Za-z]+$/.test(n.props['aria-label'] || '')), '不得是 draft 键名')
+  const qqSw = collect(byId(tree, 'fy-qq'), (n) => n.type === 'button' && n.props.role === 'switch')
+  assert.deepEqual(qqSw.map((n) => n.props['aria-label']), ['QQ', 'QQ 主动搭话', '每日上限 不限'])
+  assert.equal(qqSw[1].props['data-key'], 'qqProactive')
+  assert.ok(sws.filter((n) => /不限/.test(n.props['aria-label'])).every((n) => n.props['aria-label'] !== '不限'), '「不限」开关带所属标签')
+  const dots = collect(tree, (n) => /^fy-dot-(ok|warn|off|idle)$/.test(String(n.props.className || '')))
+  assert.ok(dots.length > 0 && dots.every((n) => n.props.title && n.props['aria-label'] && n.props.role === 'img'), '每个 StatusDot 都有 title + aria-label')
+  const css = fs.readFileSync(path.join(root, 'client.js'), 'utf8')
+  assert.ok(/select\.fy-input\{[^}]*min-width:0[^}]*max-width:100%/.test(css), '下拉框窄屏 min-width:0;max-width:100%')
+  assert.ok(!/\.fy-field\{flex-wrap:nowrap\}/.test(css), '.fy-field 允许换行')
+}
+
 console.log('client-render ✓  渲染通过：状态条 + 5 通道卡（卡头平台开关/动作）· 通用区 · 自由度区 · 大脑（LLM）卡片 · ESP32 卡片（正常态 + 空状态）· 连接状态（4 夹具 + 降级 + 登录状态机）· 请求', fetchCalls.length, '次')

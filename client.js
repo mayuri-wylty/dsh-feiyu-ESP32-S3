@@ -108,7 +108,7 @@ input.fy-w-lg{width:340px}
 input.fy-w-md{width:248px}
 input.fy-w-sm{width:84px}
 input.fy-w-xs{width:64px}
-select.fy-input{min-width:250px}
+select.fy-input{width:250px;min-width:0;max-width:100%}
 textarea.fy-input{width:100%;min-height:136px;resize:vertical;line-height:1.65;font-family:inherit}
 .fy-btn{background:transparent;
   border:1px solid var(--dsw-alias-border-l2,color-mix(in srgb,currentColor 26%,transparent));
@@ -171,7 +171,8 @@ textarea.fy-input{width:100%;min-height:136px;resize:vertical;line-height:1.65;f
 .fy-dot-off{background:#c9564d}
 .fy-dot-idle{display:inline-block;width:6px;height:6px;border-radius:50%;margin-right:6px;vertical-align:1px;background:var(--dsw-alias-label-tertiary,#9aa4b2);opacity:.5}
 .fy-suffix{font-size:12px;color:var(--dsw-alias-label-secondary,#8b95a5);white-space:nowrap}
-.fy-field{flex-wrap:nowrap}
+.fy-input-err,input.fy-input.fy-input-err{border-color:#c9564d}
+.fy-icon-btn{padding:5px 9px;line-height:1}
 .fy-unl{display:inline-flex;align-items:center;gap:6px;margin-left:6px}
 .fy-unl-label{font-size:12px;color:var(--dsw-alias-label-secondary,#8b95a5);white-space:nowrap}
 .fy-flash{animation:fy-flash 0.9s ease-out}
@@ -278,6 +279,7 @@ textarea.fy-input{width:100%;min-height:136px;resize:vertical;line-height:1.65;f
 				role: "switch",
 				"aria-checked": props.on ? "true" : "false",
 				"aria-label": props.label || "",
+				"data-key": props.name,
 				disabled: props.disabled,
 				onClick: () => props.onChange(!props.on),
 			}, h("i"));
@@ -307,7 +309,7 @@ textarea.fy-input{width:100%;min-height:136px;resize:vertical;line-height:1.65;f
 				}),
 				props.onUnlimited
 					? h("span", { className: "fy-unl" },
-						h(Toggle, { on: !!props.unlimited, label: "不限", onChange: props.onUnlimited }),
+						h(Toggle, { on: !!props.unlimited, label: (props.label ? props.label + " " : "") + "不限", onChange: props.onUnlimited }),
 						h("span", { className: "fy-unl-label" }, "不限"))
 					: null);
 		}
@@ -331,7 +333,8 @@ textarea.fy-input{width:100%;min-height:136px;resize:vertical;line-height:1.65;f
 		function StatusDot(props) {
 			const s = props.state === "ok" || props.state === "warn" ? props.state
 				: (props.state === "unknown" || props.state === "idle") ? "idle" : "off";
-			return h("span", { className: "fy-dot-" + s });
+			const txt = { ok: "正常", warn: "注意", off: "异常", idle: "未检测" }[s];
+			return h("span", { className: "fy-dot-" + s, role: "img", title: props.title || txt, "aria-label": txt });
 		}
 
 		// ===== ChannelCard =====
@@ -414,7 +417,8 @@ textarea.fy-input{width:100%;min-height:136px;resize:vertical;line-height:1.65;f
 				h(Field, { label: "启用" },
 					h(Toggle, {
 						on: draft[kRoam],
-						label: kRoam,
+						name: kRoam,
+						label: (props.platform === "bili" ? "B站" : "抖音") + "自由刷 启用",
 						onChange: (v) => {
 							set(kRoam, v);
 							save(patch("enabled", v), v ? c.onMsg : c.offMsg);
@@ -424,7 +428,8 @@ textarea.fy-input{width:100%;min-height:136px;resize:vertical;line-height:1.65;f
 				h(Field, { label: "不限量" },
 					h(Toggle, {
 						on: draft[kUnl],
-						label: kUnl,
+						name: kUnl,
+						label: (props.platform === "bili" ? "B站" : "抖音") + "自由刷 不限量",
 						onChange: (v) => {
 							set(kUnl, v);
 							save(patch("unlimited", v), v ? "自由：不限条数/时长" : "按下面限度刷");
@@ -470,14 +475,16 @@ textarea.fy-input{width:100%;min-height:136px;resize:vertical;line-height:1.65;f
 				out.push(row("douyin", d.configured && why ? "warn" : "off", "未登录" + (why ? "：" + why : "")));
 			} else out.push(row("douyin", "unknown", "未检测"));
 
+			// 整段缺失（/connections 还没返回或读失败）= 未探测，灰点，不是「网关未启动 / 未运行」
 			const q = r.qq || {};
-			if (!(q.gateway && q.gateway.ok)) out.push(row("qq", "off", "网关未启动"));
+			if (!r.qq) out.push(row("qq", "unknown", "未检测"));
+			else if (!(q.gateway && q.gateway.ok)) out.push(row("qq", "off", "网关未启动"));
 			else if (q.loggedIn === true) out.push(row("qq", "ok", "已登录：" + (q.nickname || "") + (q.uin ? "（" + q.uin + "）" : "")));
 			else if (q.loggedIn === false) out.push(row("qq", "warn", "网关在线但未登录" + (q.error ? "：" + q.error : "")));
 			else out.push(row("qq", "unknown", "未检测"));
 
 			const w = r.wechat || {};
-			out.push(w.alive ? row("wechat", "ok", "运行中") : row("wechat", "off", "未运行"));
+			out.push(!r.wechat ? row("wechat", "unknown", "未检测") : w.alive ? row("wechat", "ok", "运行中") : row("wechat", "off", "未运行"));
 
 			const e = r.esp32 || {};
 			if (e.running === true) out.push(row("esp32", "ok", "通道运行中" + (Array.isArray(e.devices) ? "，在线设备 " + e.devices.length : "")));
@@ -882,6 +889,10 @@ textarea.fy-input{width:100%;min-height:136px;resize:vertical;line-height:1.65;f
 			const [busy, setBusy] = useState(false);
 			const [copied, setCopied] = useState(false);
 			const [allow, setAllow] = useState([]);
+			const [allowOk, setAllowOk] = useState(null);   // null = 读取中；true = 已读到；false = 读取失败（此时禁止增删，避免把"没读到"当空名单覆盖写回）
+			const [allowErr, setAllowErr] = useState("");     // 白名单保存失败：只用输入框红边框表达，不混进 ESP32 状态读取失败的文案
+			const allowRef = useRef([]);
+			const allowQueue = useRef(Promise.resolve());
 			const [allowText, setAllowText] = useState("");
 			const [flashAllow, setFlashAllow] = useState(false);
 			const [chk, setChk] = useState(null);
@@ -911,8 +922,11 @@ textarea.fy-input{width:100%;min-height:136px;resize:vertical;line-height:1.65;f
 				try {
 					const c = await apiRetry("/config");
 					const list = c && c.config && c.config.esp32 && c.config.esp32.allowDevices;
-					setAllow(Array.isArray(list) ? list.map(normDeviceId).filter(Boolean) : []);
-				} catch { /* 白名单读不到就按空（不限制）展示，状态接口的错误已在上方提示 */ }
+					const next = Array.isArray(list) ? list.map(normDeviceId).filter(Boolean) : [];
+					allowRef.current = next;
+					setAllow(next);
+					setAllowOk(true);
+				} catch { setAllowOk(false); }
 			}, []);
 
 			useEffect(() => { load(); loadAllow(); }, [load, loadAllow]);
@@ -932,25 +946,38 @@ textarea.fy-input{width:100%;min-height:136px;resize:vertical;line-height:1.65;f
 				load();
 			};
 
-			const saveAllow = async (next) => {
-				try {
-					await api("/config", { method: "POST", body: JSON.stringify({ esp32: { allowDevices: next } }) });
-					setAllow(next);
-					setErr("");
-					setFlashAllow(true);
-					setTimeout(() => setFlashAllow(false), 900);
-				} catch (e) {
-					setErr("白名单保存失败：" + String((e && e.message) || e));
-				}
+			// 白名单增删：串行排队，每次基于"最新已落盘值"（allowRef）算新名单，连续两次加入不会互相吞掉；
+			// fn(list) 返回同一个数组引用 = 无变化，不发请求。返回 true = 已落盘（或无需落盘）。
+			const mutateAllow = (fn) => {
+				const run = async () => {
+					const cur = allowRef.current;
+					const next = fn(cur);
+					if (next === cur) return true;
+					try {
+						await api("/config", { method: "POST", body: JSON.stringify({ esp32: { allowDevices: next } }) });
+						allowRef.current = next;
+						setAllow(next);
+						setAllowErr("");
+						setFlashAllow(true);
+						setTimeout(() => setFlashAllow(false), 900);
+						return true;
+					} catch (e) {
+						setAllowErr(String((e && e.message) || e) || "保存失败");
+						return false;
+					}
+				};
+				const p = allowQueue.current.then(run, run);
+				allowQueue.current = p;
+				return p;
 			};
 			const addAllow = async (raw) => {
 				const id = normDeviceId(raw);
-				if (!id) return;
-				setAllowText("");
-				if (allow.includes(id)) return;
-				await saveAllow(allow.concat(id));
+				if (!id || allowOk !== true) return;
+				const ok = await mutateAllow((list) => (list.includes(id) ? list : list.concat(id)));
+				if (ok) setAllowText("");
 			};
-			const removeAllow = (id) => saveAllow(allow.filter((x) => x !== id));
+			const removeAllow = (id) => (allowOk === true ? mutateAllow((list) => (list.includes(id) ? list.filter((x) => x !== id) : list)) : undefined);
+			const refreshAll = () => { load(); loadAllow(); };
 
 			const copyOta = useCallback(async () => {
 				const url = (st && st.otaUrl) || "";
@@ -1004,7 +1031,9 @@ textarea.fy-input{width:100%;min-height:136px;resize:vertical;line-height:1.65;f
 				id: "fy-esp32",
 				title: "小智 ESP32 通道",
 				state: state || undefined,
-				action: h("button", { className: "fy-btn", onClick: runCheck, disabled: chkBusy || busy }, chkBusy ? "自检中…" : "自检"),
+				action: h("div", { className: "fy-card-act" },
+					h("button", { type: "button", className: "fy-btn fy-icon-btn", title: "刷新", "aria-label": "刷新", onClick: refreshAll, disabled: busy }, "↻"),
+					h("button", { className: "fy-btn", onClick: runCheck, disabled: chkBusy || busy }, chkBusy ? "自检中…" : "自检")),
 			},
 				err ? h("div", { className: "fy-notice err" }, "ESP32 状态读取失败：" + err) : null,
 
@@ -1023,16 +1052,21 @@ textarea.fy-input{width:100%;min-height:136px;resize:vertical;line-height:1.65;f
 				// 设备白名单（空 = 不限制）
 				h(Field, { label: "设备白名单" },
 					h("div", { className: "fy-esp32-allow" },
+						allowOk === false ? h(StatusDot, { state: "off", title: "白名单读取失败：读到之前不能增删（点卡头「刷新」重试）" }) : null,
 						allow.map((id) => h("span", { className: "fy-esp32-wl", key: id },
 							id,
-							h("button", { type: "button", className: "fy-esp32-wl-x", "aria-label": "移除 " + id, onClick: () => removeAllow(id) }, "×"))),
+							h("button", { type: "button", className: "fy-esp32-wl-x", "aria-label": "移除 " + id, disabled: allowOk !== true, onClick: () => removeAllow(id) }, "×"))),
 						h("input", {
-							className: "fy-input fy-w-md" + (flashAllow ? " fy-flash" : ""), type: "text", autoComplete: "off",
+							className: "fy-input fy-w-md" + (flashAllow ? " fy-flash" : "") + (allowErr ? " fy-input-err" : ""), type: "text", autoComplete: "off",
 							value: allowText, placeholder: allow.length ? "添加 Device-Id" : "任意设备", "aria-label": "allow-device",
-							onChange: (e) => setAllowText(e.target.value),
+							title: allowErr || undefined, disabled: allowOk !== true,
+							onChange: (e) => { setAllowText(e.target.value); if (allowErr) setAllowErr(""); },
 							onKeyDown: (e) => { if (e.key === "Enter") { if (e.preventDefault) e.preventDefault(); addAllow(allowText); } },
-							onBlur: () => { if (normDeviceId(allowText)) addAllow(allowText); },
-						}))),
+						}),
+						h("button", {
+							type: "button", className: "fy-btn fy-icon-btn fy-esp32-add", title: "添加", "aria-label": "添加到白名单",
+							disabled: allowOk !== true || !normDeviceId(allowText), onClick: () => addAllow(allowText),
+						}, "＋"))),
 
 				// 云端 ASR / TTS 配置
 				h(Esp32Providers, { onChanged: load }),
@@ -1050,7 +1084,7 @@ textarea.fy-input{width:100%;min-height:136px;resize:vertical;line-height:1.65;f
 							h("span", { className: "fy-suffix" }, relTime(d.lastSeenAt)),
 							did ? h("button", {
 								type: "button", className: "fy-btn fy-esp32-join" + (added ? " added" : ""),
-								disabled: added, onClick: () => addAllow(did),
+								disabled: added || allowOk !== true, onClick: () => addAllow(did),
 							}, added ? "已加入" : "加入白名单") : null);
 					})),
 
@@ -1079,9 +1113,10 @@ textarea.fy-input{width:100%;min-height:136px;resize:vertical;line-height:1.65;f
 		const CHANNEL_ANCHORS = { bilibili: "fy-ch-bili", douyin: "fy-ch-douyin", qq: "fy-qq", wechat: "fy-wechat", esp32: "fy-esp32" };
 		const BAR_LABELS = { esp32: "小智ESP32" };
 		function StatusBar(props) {
-			const { raw, status, selftest, busy, runSelftest, save, setStatus } = props;
+			const { raw, status, selftest, busy, runSelftest, save, setStatus, refresh, errs } = props;
 			const rows = deriveConnections(raw || {});
-			const dryRun = !!(status && status.dryRun);
+			// status 还没读到 = 无选中态（中性），不能把「没读到」显示成红色「真发」
+			const dryRun = status ? !!status.dryRun : null;
 			const mood = (status && status.mood) || { value: 0, hunger: 0 };
 			const info = status
 				? "生物钟 " + (status.scheduler && status.scheduler.ok ? "运行中" : "停着")
@@ -1112,6 +1147,8 @@ textarea.fy-input{width:100%;min-height:136px;resize:vertical;line-height:1.65;f
 								if (ok) setStatus((prev) => Object.assign({}, prev || {}, { dryRun: v }));
 							},
 						}),
+						errs && errs.length ? h(StatusDot, { state: "off", title: errs.join("；") }) : null,
+						h("button", { type: "button", className: "fy-btn fy-icon-btn", title: "刷新", "aria-label": "刷新", onClick: refresh }, "↻"),
 						h("button", { className: "fy-btn", onClick: runSelftest, disabled: busy === "selftest" },
 							busy === "selftest" ? "体检中…" : "体检"))),
 				selftest ? h("div", { className: "fy-check" },
@@ -1278,7 +1315,8 @@ textarea.fy-input{width:100%;min-height:136px;resize:vertical;line-height:1.65;f
 					h(Field, { label: "AI 表情包" },
 						h(Toggle, {
 							on: draft.aiSticker,
-							label: "aiSticker",
+							name: "aiSticker",
+							label: "AI 表情包",
 							onChange: (v) => {
 								setDraft(Object.assign({}, draft, { aiSticker: v }));
 								save({ imageGen: Object.assign({ enabled: true, dailyMax: 30 }, cfg && cfg.imageGen, { enabled: v }) },
@@ -1298,7 +1336,8 @@ textarea.fy-input{width:100%;min-height:136px;resize:vertical;line-height:1.65;f
 				h(Field, { label: "主动搭话" },
 					h(Toggle, {
 						on: draft.qqProactive,
-						label: "qqProactive",
+						name: "qqProactive",
+						label: "QQ 主动搭话",
 						onChange: (v) => { setDraft(Object.assign({}, draft, { qqProactive: v })); saveProactive({ enabled: v }, v ? "主动搭话已开" : "主动搭话已关"); },
 					})),
 				h(NumberField, {
@@ -1309,15 +1348,17 @@ textarea.fy-input{width:100%;min-height:136px;resize:vertical;line-height:1.65;f
 						saveProactive({ dailyMax: n }, "主动搭话日上限已保存");
 					},
 					onCommit: (n) => {
-						setDraft(Object.assign({}, draft, { qqProactiveMax: n }));
-						saveProactive({ dailyMax: Math.max(0, n) }, "主动搭话日上限已保存");
+						const v = Math.max(0, n);
+						setDraft(Object.assign({}, draft, { qqProactiveMax: v }));
+						saveProactive({ dailyMax: v }, "主动搭话日上限已保存");
 					},
 				}),
 				h(NumberField, {
 					label: "最小间隔", suffix: "分钟", value: draft.qqProactiveGap, dflt: 150,
 					onCommit: (n) => {
-						setDraft(Object.assign({}, draft, { qqProactiveGap: n }));
-						saveProactive({ minGapMin: Math.max(1, n || 150) }, "两次搭话最小间隔已保存");
+						const v = Math.max(1, n || 150);   // 落盘值；draft 同步成它，输入框不再显示 0 而实际存 150
+						setDraft(Object.assign({}, draft, { qqProactiveGap: v }));
+						saveProactive({ minGapMin: v }, "两次搭话最小间隔已保存");
 					},
 				}));
 		}
@@ -1360,7 +1401,8 @@ textarea.fy-input{width:100%;min-height:136px;resize:vertical;line-height:1.65;f
 				h(Field, { label: "自己判断该不该接" },
 					h(Toggle, {
 						on: draft.wxSkip,
-						label: "smart_skip",
+						name: "smart_skip",
+						label: "微信 自己判断该不该接",
 						onChange: (v) => {
 							setDraft(Object.assign({}, draft, { wxSkip: v }));
 							save({ wechat: { smart_skip: v } }, v ? "智能判断已开" : "每条都回");
@@ -1412,7 +1454,8 @@ textarea.fy-input{width:100%;min-height:136px;resize:vertical;line-height:1.65;f
 						h(Toggle, {
 							danger: true,
 							on: draft.freedomOn,
-							label: "freedomOn",
+							name: "freedomOn",
+							label: "完全自由",
 							onChange: async (v) => {
 								setDraft(Object.assign({}, draft, { freedomOn: v }));
 								const ok = await save({ freedom: { enabled: v } }, v ? "完全自由已开：世界是她的了" : "完全自由已关");
@@ -1436,7 +1479,8 @@ textarea.fy-input{width:100%;min-height:136px;resize:vertical;line-height:1.65;f
 						h(Toggle, {
 							danger: true,
 							on: draft.webRoam,
-							label: "webRoam",
+							name: "webRoam",
+							label: "自由上网",
 							onChange: async (v) => {
 								setDraft(Object.assign({}, draft, { webRoam: v }));
 								const ok = await save({ web: { roam: { enabled: v } } }, v ? "自由上网已开" : "自由上网已关");
@@ -1460,7 +1504,8 @@ textarea.fy-input{width:100%;min-height:136px;resize:vertical;line-height:1.65;f
 						h(Toggle, {
 							danger: true,
 							on: draft.webSelfUp,
-							label: "webSelfUp",
+							name: "webSelfUp",
+							label: "自我升级",
 							onChange: (v) => { setDraft(Object.assign({}, draft, { webSelfUp: v })); save({ web: { selfUpgrade: { enabled: v } } }, v ? "自我升级已开：改代码前强制备份，改完强制测试+日志" : "自我升级已关（只看只学不改）"); },
 						})),
 
@@ -1469,7 +1514,8 @@ textarea.fy-input{width:100%;min-height:136px;resize:vertical;line-height:1.65;f
 						h(Toggle, {
 							danger: true,
 							on: draft.evoOn,
-							label: "evoOn",
+							name: "evoOn",
+							label: "人格进化",
 							onChange: (v) => { setDraft(Object.assign({}, draft, { evoOn: v })); save({ personality: { evolve: { enabled: v } } }, v ? "人格进化已开：她定期复盘并更新自己的人设" : "人格进化已关"); },
 						})),
 					h(Field, { label: "进化间隔", suffix: "天/次" },
@@ -1497,14 +1543,14 @@ textarea.fy-input{width:100%;min-height:136px;resize:vertical;line-height:1.65;f
 				props.onCommit(n);
 			};
 			return h(Field, { label: props.label },
-				h(Toggle, { on: props.on, label: props.toggleLabel, danger: props.danger, onChange: props.onToggle }),
+				h(Toggle, { on: props.on, name: props.toggleLabel, label: props.label, danger: props.danger, onChange: props.onToggle }),
 				h("input", {
 					className: "fy-input fy-w-xs", type: "number", min: 0, max: props.max, value: shown,
 					disabled: zero, onChange: (e) => setText(e.target.value), onBlur: commit,
 				}),
 				props.suffix ? h("span", { className: "fy-suffix" }, props.suffix) : null,
 				h("span", { className: "fy-unl" },
-					h(Toggle, { on: zero, label: "不限", onChange: (v) => props.onCommit(v ? 0 : props.dflt) }),
+					h(Toggle, { on: zero, label: (props.label ? props.label + " " : "") + "不限", onChange: (v) => props.onCommit(v ? 0 : props.dflt) }),
 					h("span", { className: "fy-unl-label" }, "不限")));
 		}
 
@@ -1522,7 +1568,8 @@ textarea.fy-input{width:100%;min-height:136px;resize:vertical;line-height:1.65;f
 				h(Field, { label: "静默模式" },
 					h(Toggle, {
 						on: draft.douyinSilent,
-						label: "douyinSilent",
+						name: "douyinSilent",
+						label: "抖音 静默模式",
 						onChange: (v) => {
 							set({ douyinSilent: v });
 							save({ douyin: { watch: { silent: v } } }, v ? "已开启静默：刷/看/分享都无头后台跑" : "已关闭静默（有头，可看操作过程）");
@@ -1531,7 +1578,8 @@ textarea.fy-input{width:100%;min-height:136px;resize:vertical;line-height:1.65;f
 				h(Field, { label: "分享给主人" },
 					h(Toggle, {
 						on: draft.douyinShare,
-						label: "douyinShare",
+						name: "douyinShare",
+						label: "抖音 分享给主人",
 						onChange: (v) => {
 							set({ douyinShare: v });
 							save({ douyin: { shareToOwner: v } }, v ? "已开启：看到有意思的视频会抖音私信发你" : "已关闭分享给主人");
@@ -1546,7 +1594,8 @@ textarea.fy-input{width:100%;min-height:136px;resize:vertical;line-height:1.65;f
 				h(Field, { label: "自主评论" },
 					h(Toggle, {
 						on: draft.douyinAutoComment,
-						label: "douyinAutoComment",
+						name: "douyinAutoComment",
+						label: "抖音 自主评论",
 						onChange: (v) => {
 							set({ douyinAutoComment: v });
 							save({ douyin: { autoComment: v } }, v ? "已开启：刷到也会以自学习人格发评论" : "已关闭自主评论");
@@ -1555,7 +1604,8 @@ textarea.fy-input{width:100%;min-height:136px;resize:vertical;line-height:1.65;f
 				h(Field, { label: "私信陪聊" },
 					h(Toggle, {
 						on: draft.douyinDm,
-						label: "douyinDm",
+						name: "douyinDm",
+						label: "抖音 私信陪聊",
 						onChange: (v) => {
 							set({ douyinDm: v });
 							save({ douyin: { dm: { enabled: v } } }, v ? "私信陪聊已开启" : "私信陪聊已关闭");
@@ -1565,7 +1615,8 @@ textarea.fy-input{width:100%;min-height:136px;resize:vertical;line-height:1.65;f
 				h(Field, { label: "随 DSH 自启" },
 					h(Toggle, {
 						on: draft.douyinDmStartWithDsh,
-						label: "douyinDmStartWithDsh",
+						name: "douyinDmStartWithDsh",
+						label: "抖音 随 DSH 自启",
 						onChange: async (v) => {
 							set({ douyinDmStartWithDsh: v });
 							// 开"自启"时顺手把私信也打开：否则自启只是"开机后再关一次"
@@ -1590,7 +1641,8 @@ textarea.fy-input{width:100%;min-height:136px;resize:vertical;line-height:1.65;f
 						h(Toggle, {
 							danger: true,
 							on: draft.douyinAt,
-							label: "douyinAt",
+							name: "douyinAt",
+							label: "抖音 评论带 @",
 							onChange: (v) => {
 								set({ douyinAt: v });
 								save({ douyin: { atMention: v } }, v ? "已开启评论 @（风控风险高）" : "已关闭评论 @（推荐，防风控）");
@@ -1626,7 +1678,8 @@ textarea.fy-input{width:100%;min-height:136px;resize:vertical;line-height:1.65;f
 				h(Field, { label: "分享（@ 你）" },
 					h(Toggle, {
 						on: draft.shareOn,
-						label: "share",
+						name: "share",
+						label: "B站 分享（@ 你）",
 						onChange: (v) => {
 							set({ shareOn: v });
 							save({ share: { enabled: v } }, v ? "分享已开启" : "分享已关闭");
@@ -1655,7 +1708,7 @@ textarea.fy-input{width:100%;min-height:136px;resize:vertical;line-height:1.65;f
 						};
 						if (!d.max) {
 							return h(Field, { key: d.on, label: d.label },
-								h(Toggle, { on: draft[d.on], label: d.on, danger: d.danger, onChange: toggle }));
+								h(Toggle, { on: draft[d.on], name: d.on, label: d.label, danger: d.danger, onChange: toggle }));
 						}
 						return h(QuotaRow, {
 							key: d.on, label: d.label, toggleLabel: d.on, on: draft[d.on], danger: d.danger, onToggle: toggle,
@@ -1679,6 +1732,7 @@ textarea.fy-input{width:100%;min-height:136px;resize:vertical;line-height:1.65;f
 			const [status, setStatus] = useState(null);
 			const [svc, setSvc] = useState(null);
 			const [selftest, setSelftest] = useState(null);
+			const [softErr, setSoftErr] = useState({});   // /status、/services 读失败的原因（状态条上的红点 + title），不再弹带「点刷新」的 toast
 			const [loading, setLoading] = useState(true);
 			const [busy, setBusy] = useState("");
 			const [error, setError] = useState("");
@@ -1764,6 +1818,26 @@ textarea.fy-input{width:100%;min-height:136px;resize:vertical;line-height:1.65;f
 			// 只发自己那一个字段就够了。以前这里维护"完整 proactive 镜像"全量发，
 			// 结果面板开着旧值时会把别处刚改的值冲回去（10-25 20:37 实测：minGapMin 25 被改回 10）。
 
+			// 软数据读取：失败重试一次，还失败就亮出来。key 非空 = 记进状态条的错误点；否则 toast（不再提及不存在的按钮）
+			const soft = (path, set, label, key) => {
+				const once = (left) => api(path).then((r) => {
+					set(r);
+					if (key) setSoftErr((prev) => { if (!prev[key]) return prev; const n = Object.assign({}, prev); delete n[key]; return n; });
+				}).catch((e) => {
+					if (left > 0) { setTimeout(() => once(left - 1), 1500); return; }
+					const text = label + "读取失败：" + ((e && e.message) || e);
+					if (key) setSoftErr((prev) => Object.assign({}, prev, { [key]: text }));
+					else flash(text, true);
+				});
+				once(1);
+			};
+			// 状态条「刷新」：重读 /status、/services、/connections（不动配置草稿）
+			const loadLive = () => {
+				soft("/status", setStatus, "运行状态", "status");
+				soft("/services", (r) => setSvc(r.services || null), "服务", "services");
+				cx.load();
+			};
+
 			const load = useCallback(async () => {
 				setLoading(true);
 				setError("");
@@ -1783,17 +1857,9 @@ textarea.fy-input{width:100%;min-height:136px;resize:vertical;line-height:1.65;f
 				// 记忆库/状态/服务是"软数据"：读失败不该挡住面板，但也不能静默 ——
 				// 以前是 .catch(() => {})，宿主刚重启时这一下读失败，记忆库就永远显示"还没读到"，
 				// 主人只能猜她到底在干嘛（10-25 实锤）。现在失败重试一次，还失败就亮出来。
-				const soft = (path, set, label) => {
-					const once = (left) => api(path).then(set).catch((e) => {
-						if (left > 0) { setTimeout(() => once(left - 1), 1500); return; }
-						flash(label + "读取失败：" + ((e && e.message) || e) + "（点「刷新」重试）", true);
-					});
-					once(1);
-				};
 				soft("/persona", (r) => setPersona(r.text || ""), "角色设定");
 				soft("/memory", setMem, "记忆库");
-				soft("/status", setStatus, "运行状态");
-				soft("/services", (r) => setSvc(r.services || null), "服务");
+				loadLive();
 			}, []);
 
 			useEffect(() => { load(); }, [load]);
@@ -2000,6 +2066,7 @@ textarea.fy-input{width:100%;min-height:136px;resize:vertical;line-height:1.65;f
 				h(StatusBar, {
 					raw: cx.raw, status: status, selftest: selftest, busy: busy,
 					runSelftest: runSelftest, save: save, setStatus: setStatus,
+					refresh: loadLive, errs: Object.keys(softErr).map((k) => softErr[k]).concat(cx.err ? ["连接状态读取失败：" + cx.err] : []),
 				}),
 
 				notice ? h("div", { className: "fy-notice" + (notice.err ? " err" : "") }, notice.msg) : null,

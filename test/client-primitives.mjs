@@ -147,7 +147,7 @@ const texts = (node, acc = []) => {
   assert.equal(input().props.disabled, false)
   assert.equal(input().props.value, 5)
   assert.equal(byClass(t, 'fy-suffix')[0].children[0], '条', '单位后缀在同一行')
-  const sw = collect(t, (n) => n.type === 'button' && n.props['aria-label'] === '不限')
+  const sw = collect(t, (n) => n.type === 'button' && n.props['aria-label'] === '最大条数 不限')
   assert.equal(sw.length, 1, '同行有"不限"小开关')
   sw[0].props.onClick()
   assert.equal(unl, true)
@@ -173,7 +173,7 @@ const texts = (node, acc = []) => {
   // 不限开启 → 数值框 disabled
   t = render(() => createElement(P.NumberField, props({ unlimited: true })))
   assert.equal(input().props.disabled, true, '"不限"开启时数值框 disabled')
-  assert.equal(collect(t, (n) => n.type === 'button' && n.props['aria-label'] === '不限')[0].props['aria-checked'], 'true')
+  assert.equal(collect(t, (n) => n.type === 'button' && n.props['aria-label'] === '最大条数 不限')[0].props['aria-checked'], 'true')
   // 没传 onUnlimited → 无开关
   t = render(() => createElement(P.NumberField, props({ onUnlimited: undefined })))
   assert.equal(collect(t, (n) => n.type === 'button').length, 0)
@@ -204,6 +204,12 @@ const texts = (node, acc = []) => {
     assert.deepEqual(classes(render(() => createElement(P.StatusDot, { state: s }))), ['fy-dot-' + s])
   }
   assert.deepEqual(classes(render(() => createElement(P.StatusDot, { state: 'weird' }))), ['fy-dot-off'])
+  for (const [s, txt] of [['ok', '正常'], ['warn', '注意'], ['off', '异常'], ['unknown', '未检测'], ['idle', '未检测']]) {
+    const d = render(() => createElement(P.StatusDot, { state: s }))
+    assert.equal(d.props.title, txt, 'StatusDot title：' + s)
+    assert.equal(d.props['aria-label'], txt, 'StatusDot aria-label：' + s)
+  }
+  assert.equal(render(() => createElement(P.StatusDot, { state: 'off', title: '读取失败' })).props.title, '读取失败', 'title 可覆盖')
   assert.ok(!classes(render(() => createElement(P.StatusDot, { state: 'ok' }))).includes('fy-dot'), '不复用旧 fy-dot')
 }
 
@@ -343,7 +349,8 @@ const texts = (node, acc = []) => {
     const switches = collect(t, (n) => n.type === 'button' && n.props.role === 'switch')
     assert.equal(switches.length, 2)
     const newText = texts(t).filter((x) => CJK.test(x))
-    assert.deepEqual(switches.map((s) => s.props['aria-label']), [keys[0], keys[1]], '开关 aria-label = draft 键名（同旧代码）')
+    assert.deepEqual(switches.map((s) => s.props['data-key']), [keys[0], keys[1]], '开关 data-key = draft 键名（同旧代码的键）')
+    assert.ok(switches.every((s) => /[一-龥]/.test(s.props['aria-label']) && !keys.includes(s.props['aria-label'])), '开关 aria-label 是可读中文，不是 draft 键名')
     for (const sw of switches) sw.props.onClick()   // on=true → onChange(false)
     base[keys[0]] = false; base[keys[1]] = false
     for (const sw of collect(render(() => createElement(P.FreeBrowse, props)), (n) => n.type === 'button' && n.props.role === 'switch')) sw.props.onClick()   // on=false → onChange(true)

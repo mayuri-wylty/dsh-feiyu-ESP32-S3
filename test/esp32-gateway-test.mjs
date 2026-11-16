@@ -523,6 +523,36 @@ test('allowDevices：白名单外设备 hello 后关闭，日志不含 token', a
   })
 })
 
+test('allowDevices 热更新：显式 getConfig 时，改配置后无需重启即生效；未传 getConfig 保持快照', async () => {
+  const live = { esp32: baseEsp32({ allowDevices: [] }) }
+  await withGateway({ esp32: { allowDevices: [] }, getConfig: () => live }, async ({ gw }) => {
+    const port = gw.address().port
+    const a = await openAndHello(port, { deviceId: '11:22:33:44:55:66' })
+    assert.equal(a.hello.type, 'hello', '白名单为空时放行')
+    a.ws.close()
+    await waitClose(a.ws)
+
+    live.esp32.allowDevices = ['aa:bb:cc:dd:ee:01']
+    const deniedWs = openClient(port, { deviceId: '11:22:33:44:55:66' })
+    await waitOpen(deniedWs)
+    const closed = waitClose(deniedWs)
+    deniedWs.send(JSON.stringify(CLIENT_HELLO))
+    assert.equal((await closed).code, 4003, '改配置后非白名单设备被 DEVICE_NOT_ALLOWED 关闭')
+
+    const ok = await openAndHello(port, { deviceId: 'AA:BB:CC:DD:EE:01' })
+    assert.equal(ok.hello.type, 'hello', '白名单内设备仍放行')
+    ok.ws.close()
+    await waitClose(ok.ws)
+  })
+  // 未传 getConfig：esp32 选项即快照，不去读真实配置
+  await withGateway({ esp32: { allowDevices: [] } }, async ({ gw }) => {
+    const r = await openAndHello(gw.address().port, { deviceId: '11:22:33:44:55:66' })
+    assert.equal(r.hello.type, 'hello')
+    r.ws.close()
+    await waitClose(r.ws)
+  })
+})
+
 // ── 生命周期 ────────────────────────────────────────────────────────────────
 test('生命周期：start/stop 幂等、stop 关闭连接并释放端口、可重启', async () => {
   const { gw } = makeGateway()
