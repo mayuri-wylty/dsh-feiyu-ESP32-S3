@@ -52,6 +52,7 @@ export function buildResponses({ conn = 'loggedIn' } = {}) {
     web: { roam: { enabled: true, restMin: 2 }, selfUpgrade: { enabled: false } },
     personality: { evolve: { enabled: true, days: 2 } },
     freedom: { enabled: false },
+    esp32: { allowDevices: [DEVICE_A] },
     wechat: { rhythm: 'fast', merge_window_sec: 3, context_n: 12, smart_skip: true },
     voice: { ref_audio_path: 'D:/voices/sunshine_girl/sunshine_girl.wav', prompt_text: '参考文本示例' },
     // 后端 /config 对 llm 段脱敏：删 api_key，加 hasKey
@@ -115,6 +116,10 @@ export function buildResponses({ conn = 'loggedIn' } = {}) {
         { deviceId: DEVICE_A, role: 'user', text: '讲个笑话', meta: {} },
         { deviceId: DEVICE_A, role: 'assistant', text: '为什么小鱼不爱上网？因为怕被网住。', meta: { latency: { vadMs: 110, asrMs: 310, llmFirstMs: 480, ttsFirstMs: 190, totalMs: 1320 } } },
       ],
+    },
+    '/dsh-feiyu/api/esp32/selfcheck': {
+      ok: false,
+      checks: [{ id: 'gateway', ok: true }, { id: 'ota', ok: true }, { id: 'ws', ok: false, detail: '握手超时' }, { id: 'token', ok: true }],
     },
     '/dsh-feiyu/api/esp32/providers': {
       ok: true,
