@@ -87,7 +87,7 @@ window.__ModuleLoader__.load({
 
 		// ── 样式（用 DSH 主题变量，浅色/深色都跟着走）──────────────────────────
 		const CSS = `
-.fy-panel{display:flex;flex-direction:column;gap:14px;padding:2px 0 48px;color:var(--dsw-alias-label-primary,inherit);font-size:13px}
+.fy-panel{min-width:0;max-width:100%;display:flex;flex-direction:column;gap:14px;padding:2px 0 48px;color:var(--dsw-alias-label-primary,inherit);font-size:13px}
 .fy-hero{display:flex;align-items:center;gap:12px}
 .fy-avatar{width:42px;height:42px;border-radius:13px;display:flex;align-items:center;justify-content:center;font-size:22px;
   background:var(--dsw-alias-bg-l2,color-mix(in srgb,currentColor 8%,transparent));
@@ -95,7 +95,7 @@ window.__ModuleLoader__.load({
 .fy-h1{font-size:15px;font-weight:600;line-height:1.3}
 .fy-card{border:1px solid var(--dsw-alias-border-l2,color-mix(in srgb,currentColor 14%,transparent));border-radius:12px;
   background:var(--dsw-alias-bg-l1,color-mix(in srgb,currentColor 3%,transparent));padding:14px 16px}
-.fy-card-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px}
+.fy-card-head{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:6px 10px;margin-bottom:10px}
 .fy-card-title{font-size:13px;font-weight:600}
 .fy-row{display:flex;align-items:center;gap:10px;margin:8px 0;flex-wrap:wrap}
 .fy-label{min-width:96px;font-size:12.5px;color:var(--dsw-alias-label-secondary,#8b95a5)}
@@ -153,7 +153,8 @@ textarea.fy-input{width:100%;min-height:136px;resize:vertical;line-height:1.65;f
 .fy-check{font-size:12px;line-height:1.8;margin-top:8px;max-height:200px;overflow:auto}
 .fy-check span.ok{color:#3fbf6f}
 .fy-check span.no{color:#c9564d}
-.fy-mono{font-family:ui-monospace,Consolas,"Courier New",monospace;font-size:12px;word-break:break-all}
+.fy-mono{font-family:ui-monospace,Consolas,"Courier New",monospace;font-size:12px;word-break:break-all;overflow-wrap:anywhere}
+.fy-dev b,.fy-esp32-wl{overflow-wrap:anywhere}
 .fy-dev{display:flex;align-items:center;gap:8px;padding:6px 0;font-size:12px;
   border-bottom:1px dashed var(--dsw-alias-border-l2,color-mix(in srgb,currentColor 10%,transparent))}
 .fy-dev b{font-weight:500}
