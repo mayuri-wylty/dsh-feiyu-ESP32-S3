@@ -150,7 +150,7 @@ const collect = (node, predicate, acc = []) => {
   for (const k of node.children || []) collect(k, predicate, acc)
   return acc
 }
-const cards = collect(tree, (n) => n.props.className === 'fy-card')
+const cards = collect(tree, (n) => /^fy-card( |$)/.test(String(n.props.className || '')))
 const esp32Card = cards.find((c) => JSON.stringify(c).includes('小智 ESP32 通道'))
 assert.ok(esp32Card, 'ESP32 卡片应渲染出来')
 const esp32Text = JSON.stringify(esp32Card)

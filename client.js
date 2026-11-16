@@ -202,6 +202,17 @@ textarea.fy-input{width:100%;min-height:136px;resize:vertical;line-height:1.65;f
 .fy-zone-head{display:flex;align-items:center;gap:10px;align-self:flex-start;background:transparent;border:0;padding:2px 0;font:inherit;font-size:13px;font-weight:600;color:inherit;cursor:pointer}
 .fy-zone-summary{font-size:11.5px;font-weight:400;color:var(--dsw-alias-label-tertiary,#98a2b3)}
 .fy-zone-body{flex-direction:column;gap:0}
+.fy-esp32-checks{display:flex;flex-wrap:wrap;align-items:center;gap:4px 14px;font-size:12px}
+.fy-esp32-chk{display:inline-flex;align-items:center;white-space:nowrap}
+.fy-esp32-idle{display:inline-block;width:6px;height:6px;border-radius:50%;margin-right:6px;vertical-align:1px;background:var(--dsw-alias-label-tertiary,#9aa4b2);opacity:.5}
+.fy-esp32-allow{display:flex;flex-wrap:wrap;align-items:center;gap:6px}
+.fy-esp32-wl{display:inline-flex;align-items:center;gap:4px;font-size:12px;font-family:ui-monospace,Consolas,"Courier New",monospace;padding:2px 4px 2px 9px;border-radius:999px;
+  background:var(--dsw-alias-bg-l2,color-mix(in srgb,currentColor 6%,transparent));border:1px solid var(--dsw-alias-border-l2,color-mix(in srgb,currentColor 10%,transparent))}
+.fy-esp32-wl-x{background:transparent;border:0;padding:0 5px;font:inherit;font-size:14px;line-height:1;color:var(--dsw-alias-label-tertiary,#98a2b3);cursor:pointer}
+.fy-esp32-wl-x:hover{color:#c9564d}
+.fy-esp32-join{margin-left:auto;padding:2px 10px;font-size:11.5px}
+.fy-esp32-join.added{color:#2e9e5b;border-color:#2e9e5b}
+.fy-esp32-kind{margin-top:12px;padding-top:8px;border-top:1px dashed var(--dsw-alias-border-l2,rgba(128,128,128,.25))}
 `;
 
 		function useStyles() {
@@ -792,9 +803,9 @@ textarea.fy-input{width:100%;min-height:136px;resize:vertical;line-height:1.65;f
 				if (!data || !s) return null;
 				const list = data.providers.filter((p) => p.kind === kind);
 				const meta = list.find((p) => p.id === s.id) || list[0];
-				return h("div", { key: kind, style: { marginTop: 12, paddingTop: 8, borderTop: "1px dashed var(--dsw-alias-border-l2,rgba(128,128,128,.25))" } },
+				return h("div", { key: kind, className: "fy-esp32-kind" },
 					h("div", { className: "fy-sub", style: { fontWeight: 600 } }, PROV_KIND_LABEL[kind]),
-					h(Row, { label: "服务商" },
+					h(Field, { label: "服务商" },
 						h("select", {
 							className: "fy-input", value: s.id, "aria-label": kind + "-provider",
 							onChange: (e) => patchKind(kind, provPick(data, kind, e.target.value)),
@@ -810,32 +821,34 @@ textarea.fy-input{width:100%;min-height:136px;resize:vertical;line-height:1.65;f
 								},
 							}, [h("option", { key: "", value: "" }, "选择预设…")].concat(meta.presets.map((x) => h("option", { key: x.id, value: x.id }, x.label))))
 							: null),
-					meta.fields.length ? null : h("div", { className: "fy-hint" }, "本地 provider，无需配置。"),
-					meta.fields.map((f) => h(Row, { label: f.label + (f.required ? " *" : ""), key: f.key },
+					meta.fields.map((f) => h(Field, { label: f.label + (f.required ? " *" : ""), key: f.key },
 						h("input", {
 							className: "fy-input fy-w-md", type: f.type === "password" ? "password" : (f.type === "number" ? "number" : "text"),
-							autoComplete: "off", value: s.form[f.key] == null ? "" : s.form[f.key],
+							autoComplete: "off", value: s.form[f.key] == null ? "" : s.form[f.key], title: f.hint || undefined,
 							placeholder: f.secret ? (s.hasKey ? "已保存，留空保持不变" : "") : (f.placeholder || ""),
 							onChange: (e) => patchKind(kind, { form: Object.assign({}, s.form, { [f.key]: e.target.value }) }),
 						}),
-						f.secret ? h("span", { className: "fy-tag" }, s.hasKey ? "已保存" : "未配置") : null,
-						f.hint ? h("span", { className: "fy-hint", style: { marginTop: 0 } }, f.hint) : null)),
-					h(Row, { label: "" },
-						meta.testable ? h("button", { className: "fy-btn primary", disabled: s.busy, onClick: () => doTest(kind) }, s.busy ? "测试中…" : "测试连接") : null,
-						meta.testable ? h("span", { className: "fy-hint", style: { marginTop: 0 } }, "通过后自动启用为主") : null,
-						meta.testable ? h(Switch, { on: s.auto, label: kind + "-auto", onChange: (v) => patchKind(kind, { auto: v }) }) : null,
-						meta.fields.length ? h("button", { className: "fy-btn", disabled: s.busy, onClick: () => doSave(kind) }, "仅保存") : null),
+						f.secret ? h("span", { className: "fy-tag" }, s.hasKey ? "已保存" : "未配置") : null)),
+					meta.testable || meta.fields.length ? h(Field, { label: "" },
+						meta.testable ? h("button", { className: "fy-btn primary", disabled: s.busy, title: "通过后自动启用为主", onClick: () => doTest(kind) }, s.busy ? "测试中…" : "测试连接") : null,
+						meta.fields.length ? h("button", { className: "fy-btn", disabled: s.busy, onClick: () => doSave(kind) }, "仅保存") : null) : null,
 					s.res ? h("div", { className: "fy-notice" + (s.res.ok ? "" : " err") }, s.res.text) : null);
 			};
 
 			const pd = describePipeline(data && data.pipeline);
 			return h("div", { className: "fy-prov" },
 				err ? h("div", { className: "fy-notice err" }, "云端 ASR/TTS 配置读取失败：" + err) : null,
-				data ? h(Row, { label: "生效 provider" }, h("span", { className: "fy-mono" }, pd.text)) : null,
+				data ? h(Field, { label: "生效 provider" }, h("span", { className: "fy-mono" }, pd.text)) : null,
 				pd.warn ? h("div", { className: "fy-notice err" }, pd.warn) : null,
 				renderKind("asr"),
 				renderKind("tts"));
 		}
+
+		// 状态点取值：off < warn < ok，两个来源（状态接口 / 自检结果）取更差的
+		const STATE_RANK = { off: 0, warn: 1, ok: 2 };
+		const worseState = (a, b) => (a == null ? b : b == null ? a : (STATE_RANK[a] <= STATE_RANK[b] ? a : b));
+		const normDeviceId = (v) => String(v == null ? "" : v).trim().toLowerCase();
+		const SELFCHECK_ITEMS = [["gateway", "网关"], ["ota", "OTA"], ["ws", "握手"], ["token", "Token"]];
 
 		function Esp32Card() {
 			const [st, setSt] = useState(null);
@@ -843,6 +856,11 @@ textarea.fy-input{width:100%;min-height:136px;resize:vertical;line-height:1.65;f
 			const [err, setErr] = useState("");
 			const [busy, setBusy] = useState(false);
 			const [copied, setCopied] = useState(false);
+			const [allow, setAllow] = useState([]);
+			const [allowText, setAllowText] = useState("");
+			const [flashAllow, setFlashAllow] = useState(false);
+			const [chk, setChk] = useState(null);
+			const [chkBusy, setChkBusy] = useState(false);
 
 			const load = useCallback(async () => {
 				setBusy(true);
@@ -864,7 +882,50 @@ textarea.fy-input{width:100%;min-height:136px;resize:vertical;line-height:1.65;f
 				}
 			}, []);
 
-			useEffect(() => { load(); }, [load]);
+			const loadAllow = useCallback(async () => {
+				try {
+					const c = await apiRetry("/config");
+					const list = c && c.config && c.config.esp32 && c.config.esp32.allowDevices;
+					setAllow(Array.isArray(list) ? list.map(normDeviceId).filter(Boolean) : []);
+				} catch { /* 白名单读不到就按空（不限制）展示，状态接口的错误已在上方提示 */ }
+			}, []);
+
+			useEffect(() => { load(); loadAllow(); }, [load, loadAllow]);
+
+			const runCheck = async () => {
+				setChkBusy(true);
+				try {
+					// 有失败项时后端可能给 ok:false 但带 checks：放行 ok:false，自行判定
+					const r = await api("/esp32/selfcheck", undefined, { allowNotOk: true });
+					if (!Array.isArray(r.checks)) throw new Error(r.error || "自检无结果");
+					setChk({ ok: r.ok === true && r.checks.every((c) => c && c.ok), checks: r.checks });
+				} catch (e) {
+					setChk({ ok: false, checks: [], error: String((e && e.message) || e) });
+				} finally {
+					setChkBusy(false);
+				}
+				load();
+			};
+
+			const saveAllow = async (next) => {
+				try {
+					await api("/config", { method: "POST", body: JSON.stringify({ esp32: { allowDevices: next } }) });
+					setAllow(next);
+					setErr("");
+					setFlashAllow(true);
+					setTimeout(() => setFlashAllow(false), 900);
+				} catch (e) {
+					setErr("白名单保存失败：" + String((e && e.message) || e));
+				}
+			};
+			const addAllow = async (raw) => {
+				const id = normDeviceId(raw);
+				if (!id) return;
+				setAllowText("");
+				if (allow.includes(id)) return;
+				await saveAllow(allow.concat(id));
+			};
+			const removeAllow = (id) => saveAllow(allow.filter((x) => x !== id));
 
 			const copyOta = useCallback(async () => {
 				const url = (st && st.otaUrl) || "";
@@ -879,9 +940,6 @@ textarea.fy-input{width:100%;min-height:136px;resize:vertical;line-height:1.65;f
 			}, [st]);
 
 			const devices = (st && st.devices) || [];
-			const addr = (st && st.address) || null;
-			const port = addr && addr.port != null ? addr.port : (st && st.port);
-			const host = (st && st.publicHost) || (addr && addr.address) || "";
 			const tokenSet = !!(st && st.tokenSet);
 			const lastError = st && st.lastError;
 			// 最近一条带 latency 的日志行（T22 管线写入 meta.latency）
@@ -891,42 +949,65 @@ textarea.fy-input{width:100%;min-height:136px;resize:vertical;line-height:1.65;f
 				if (m && m.latency && typeof m.latency === "object") { latency = m.latency; break; }
 			}
 
-			return h(Card, {
+			// 状态点：通道/网关/Token/ASR 的合并结论，自检失败时再降一级
+			const baseState = !st ? null
+				: !(st.enabled && st.running) ? "off"
+				: (tokenSet && st.asrAvailable) ? "ok" : "warn";
+			const chkState = !chk ? null : chk.error ? "off" : chk.ok ? "ok" : "warn";
+			const state = worseState(baseState, chkState);
+
+			// 分项：自检结果优先；没跑过自检时用状态接口能推出的部分，其余灰点
+			const byId = {};
+			((chk && chk.checks) || []).forEach((c) => { if (c && c.id) byId[c.id] = c; });
+			const derived = {
+				gateway: st ? (st.running ? "ok" : "off") : "idle",
+				ota: "idle",
+				ws: devices.length ? "ok" : "idle",
+				token: st ? (tokenSet ? "ok" : "off") : "idle",
+			};
+			const dot = (s) => (s === "idle" ? h("span", { className: "fy-esp32-idle" }) : h(StatusDot, { state: s }));
+			const checkItem = (id, label) => {
+				const c = byId[id];
+				const s = c ? (c.ok ? "ok" : "off") : (chk && !chk.error ? "idle" : derived[id]);
+				const text = id === "token" && st ? label + (tokenSet ? " 已配置" : " 未配置") : label;
+				return h("span", { className: "fy-esp32-chk", key: id, "data-chk": id, title: (c && c.detail) || undefined }, dot(s), text);
+			};
+			const asrState = !st ? "idle" : st.asrAvailable ? "ok" : "off";
+			const offTag = st && !st.enabled ? "未启用" : (st && !st.running ? "未运行" : "");
+
+			return h(ChannelCard, {
+				id: "fy-esp32",
 				title: "小智 ESP32 通道",
-				extra: h("div", { className: "fy-row", style: { margin: 0 } },
-					h("button", { className: "fy-btn", onClick: load, disabled: busy }, busy ? "刷新中…" : "刷新")),
-				hint: "ESP32 语音终端（小智协议）走本机网关：设备连上后可直接对话。配置在 ~/.dsh/feiyu.config.json 的 esp32 段（可由 /dsh-feiyu/api/config 写入；token 仅限本机生成或手编，不接受回写）。",
+				state: state || undefined,
+				action: h("button", { className: "fy-btn", onClick: runCheck, disabled: chkBusy || busy }, chkBusy ? "自检中…" : "自检"),
 			},
 				err ? h("div", { className: "fy-notice err" }, "ESP32 状态读取失败：" + err) : null,
 
-				// 未启用 / 未运行：明确提示，不留空白
-				st && !st.enabled
-					? h("div", { className: "fy-notice" }, "ESP32 通道未启用：把 feiyu.config.json 里 esp32.enabled 设为 true 后重启 DSH。")
-					: null,
-				st && st.enabled && !st.running
-					? h("div", { className: "fy-notice err" }, "ESP32 通道已启用但网关没在跑" + (lastError ? "（见下方错误）" : "：检查端口是否被占用。"))
-					: null,
+				// 分项状态（颜色表达；失败项的 detail 在 title 里）
+				h(Field, { label: "状态" },
+					h("div", { className: "fy-esp32-checks" },
+						SELFCHECK_ITEMS.map(([id, label]) => checkItem(id, label)),
+						h("span", { className: "fy-esp32-chk", "data-asr": "1" }, dot(asrState), "ASR"),
+						offTag ? h("span", { className: "fy-tag" }, offTag) : null)),
 
-				// 状态行
-				h("div", { className: "fy-stats" },
-					h("div", { className: "fy-chip" + (st && st.enabled ? "" : " bad") },
-						h("span", { className: "fy-dot" + (st && st.enabled ? "" : " off") }),
-						"通道 ", h("b", null, st ? (st.enabled ? "已启用" : "未启用") : "读取中")),
-					h("div", { className: "fy-chip" + (st && st.running ? "" : " bad") },
-						h("span", { className: "fy-dot" + (st && st.running ? "" : " off") }),
-						"网关 ", h("b", null, st ? (st.running ? "运行中" : "未运行") : "读取中")),
-					h("div", { className: "fy-chip" }, "ASR ", h("b", null, st ? (st.asrAvailable ? "可用" : "不可用") : "—")),
-					h("div", { className: "fy-chip" + (tokenSet ? "" : " bad") }, "Token ", h("b", null, tokenSet ? "已配置" : "未配置")),
-					h("div", { className: "fy-chip" }, "在线设备 ", h("b", null, devices.length))),
-
-				// 端口 / OTA
-				h(Row, { label: "监听地址" },
-					h("span", { className: "fy-mono" }, host ? host + (port != null ? ":" + port : "") : "—"),
-					h("span", { className: "fy-hint", style: { marginTop: 0 } }, "设备通过这个地址连网关")),
-				h(Row, { label: "OTA URL" },
+				h(Field, { label: "OTA URL" },
 					h("span", { className: "fy-mono" }, (st && st.otaUrl) || "—"),
 					h("button", { className: "fy-btn", onClick: copyOta, disabled: !(st && st.otaUrl) },
 						copied ? "已复制 ✓" : "复制")),
+
+				// 设备白名单（空 = 不限制）
+				h(Field, { label: "设备白名单" },
+					h("div", { className: "fy-esp32-allow" },
+						allow.map((id) => h("span", { className: "fy-esp32-wl", key: id },
+							id,
+							h("button", { type: "button", className: "fy-esp32-wl-x", "aria-label": "移除 " + id, onClick: () => removeAllow(id) }, "×"))),
+						h("input", {
+							className: "fy-input fy-w-md" + (flashAllow ? " fy-flash" : ""), type: "text", autoComplete: "off",
+							value: allowText, placeholder: allow.length ? "添加 Device-Id" : "任意设备", "aria-label": "allow-device",
+							onChange: (e) => setAllowText(e.target.value),
+							onKeyDown: (e) => { if (e.key === "Enter") { if (e.preventDefault) e.preventDefault(); addAllow(allowText); } },
+							onBlur: () => { if (normDeviceId(allowText)) addAllow(allowText); },
+						}))),
 
 				// 云端 ASR / TTS 配置
 				h(Esp32Providers, { onChanged: load }),
@@ -934,14 +1015,19 @@ textarea.fy-input{width:100%;min-height:136px;resize:vertical;line-height:1.65;f
 				// 在线设备
 				h("div", { className: "fy-sub", style: { marginTop: 10 } }, "在线设备"),
 				h("div", { className: "fy-dev-list" },
-					devices.length
-						? devices.map((d, i) => h("div", { className: "fy-dev", key: d.sessionId || d.deviceId || i },
-							h("span", { className: "fy-dot" + (d.state && d.state !== "idle" ? "" : " off") }),
+					devices.map((d, i) => {
+						const did = normDeviceId(d.deviceId);
+						const added = !!did && allow.includes(did);
+						return h("div", { className: "fy-dev", key: d.sessionId || d.deviceId || i },
+							h(StatusDot, { state: d.state && d.state !== "idle" ? "ok" : "off" }),
 							h("b", null, d.deviceId || "（未知设备）"),
 							h("span", { className: "fy-tag" }, d.state || "idle"),
-							h("span", { className: "fy-hint", style: { marginTop: 0 } }, "最后活动 " + relTime(d.lastSeenAt))))
-						: h("div", { className: "fy-hint", style: { marginTop: 4 } },
-							st && st.enabled ? "还没有设备连上来 —— 在设备上配好 OTA 地址后开机即可。" : "通道未启用，暂无设备。")),
+							h("span", { className: "fy-suffix" }, relTime(d.lastSeenAt)),
+							did ? h("button", {
+								type: "button", className: "fy-btn fy-esp32-join" + (added ? " added" : ""),
+								disabled: added, onClick: () => addAllow(did),
+							}, added ? "已加入" : "加入白名单") : null);
+					})),
 
 				// 耗时指标
 				latency ? h("div", { className: "fy-stats", style: { marginTop: 10 } },
@@ -950,15 +1036,13 @@ textarea.fy-input{width:100%;min-height:136px;resize:vertical;line-height:1.65;f
 
 				// 对话气泡
 				h("div", { className: "fy-sub", style: { marginTop: 10 } }, "最近对话"),
-				h("div", { className: "fy-mem" },
-					rows.length
-						? rows.slice().reverse().map((r, i) => h("div", {
-							className: "fy-bubble " + (r.role === "assistant" ? "assistant" : r.role === "user" ? "user" : ""),
-							key: i,
-						},
-							h("b", null, r.role === "assistant" ? "她" : r.role === "user" ? "用户" : (r.role || "系统")),
-							short(r.text, 200)))
-						: h("div", { className: "fy-hint", style: { marginTop: 4 } }, "还没有对话记录。")),
+				rows.length ? h("div", { className: "fy-mem" },
+					rows.slice().reverse().map((r, i) => h("div", {
+						className: "fy-bubble " + (r.role === "assistant" ? "assistant" : r.role === "user" ? "user" : ""),
+						key: i,
+					},
+						h("b", null, r.role === "assistant" ? "她" : r.role === "user" ? "用户" : (r.role || "系统")),
+						short(r.text, 200)))) : null,
 
 				// 最近错误（后端已脱敏）
 				lastError ? h("div", { className: "fy-notice err", style: { marginTop: 10 } }, "最近错误：" + lastError) : null);

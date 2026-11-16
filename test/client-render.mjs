@@ -209,7 +209,7 @@ assert.ok(fetchCalls.includes('/dsh-feiyu/api/config'), '没有请求 /config')
 assert.ok(styleTags.length >= 1, '样式没注入')
 
 // ── ESP32 卡片（T24）：有设备 + 有 lastError 的正常态 ────────────────────────
-for (const must of ['小智 ESP32 通道', 'OTA URL', '在线设备', '最近对话', '已配置', '可用']) {
+for (const must of ['小智 ESP32 通道', 'OTA URL', '在线设备', '最近对话', '已配置']) {
   assert.ok(text.includes(must), 'ESP32 卡片缺少：' + must)
 }
 for (const must of ['192.168.1.20:8765', 'http://192.168.1.20:8765/xiaozhi/ota/', 'aa:bb:cc', 'listening', '你好小智', '我在呢']) {
@@ -280,7 +280,7 @@ for (let pass = 0; pass < 12; pass++) {
 }
 const emptyText = allText(emptyTree)
 assert.ok(!JSON.stringify(emptyTree).includes('载入失败'), '空状态不该走到错误态')
-for (const must of ['ESP32 通道未启用', '未配置', '通道未启用，暂无设备', '还没有对话记录']) {
+for (const must of ['未启用', '未配置']) {
   assert.ok(emptyText.includes(must), 'ESP32 空状态缺少：' + must)
 }
 
@@ -319,6 +319,81 @@ for (const must of ['语音识别（ASR）', '语音合成（TTS）', '测试连
   assert.ok(provText.includes(must), 'ESP32 providers 块缺少：' + must)
 }
 assert.ok(!/"apiKey"\s*:/.test(JSON.stringify(provTree)), '渲染树不得携带 apiKey 字段')
+
+// ── ESP32 卡片交互（T3）：自检 / 设备白名单 / 在线设备一键加入 ─────────────────
+RESPONSES['/dsh-feiyu/api/esp32/status'] = {
+  ok: true, enabled: true, running: true, address: null, publicHost: '192.168.1.20',
+  otaUrl: 'http://192.168.1.20:8765/xiaozhi/ota/', tokenSet: true, asrAvailable: true,
+  devices: [
+    { deviceId: 'aa:bb:cc', sessionId: 's1', state: 'listening', lastSeenAt: Date.now() - 3_000 },
+    { deviceId: 'aa:bb:dd', sessionId: 's2', state: 'idle', lastSeenAt: Date.now() - 30_000 },
+  ],
+  lastError: null,
+}
+RESPONSES['/dsh-feiyu/api/config'].config.esp32 = { allowDevices: ['aa:bb:dd'] }
+RESPONSES['/dsh-feiyu/api/esp32/selfcheck'] = {
+  ok: false,
+  checks: [{ id: 'gateway', ok: true }, { id: 'ota', ok: true }, { id: 'ws', ok: false, detail: '握手超时' }, { id: 'token', ok: true }],
+}
+state.length = 0
+effects.length = 0
+fetchCalls = []
+await rerender()
+const btnByText = (t) => collect2(tree, (n) => n.type === 'button' && (n.children || []).includes(t))[0]
+const titleDot = () => collect2(tree, (n) => n.props.className === 'fy-card-title' && (n.children || []).some((c) => c && c.props && /^fy-dot-/.test(c.props.className || '')))
+  .map((n) => n.children.find((c) => c.props && /^fy-dot-/.test(c.props.className || '')).props.className)[0]
+const chkItems = () => collect2(tree, (n) => n.props['data-chk'])
+assert.equal(titleDot(), 'fy-dot-ok', '运行中 + Token + ASR 可用 → 卡头状态点为 ok')
+assert.ok(!allText(tree).includes('通道 已启用'), '不应再有重复的状态 chip')
+assert.ok(btnByText('自检'), '卡头应有「自检」按钮')
+
+await btnByText('自检').props.onClick()
+await rerender()
+assert.ok(fetchCalls.includes('/dsh-feiyu/api/esp32/selfcheck'), '点击自检应请求 /esp32/selfcheck')
+assert.equal(chkItems().length, 4, '自检分项应渲染 4 个点')
+assert.deepEqual(chkItems().map((n) => n.props['data-chk']), ['gateway', 'ota', 'ws', 'token'])
+assert.equal(chkItems().find((n) => n.props['data-chk'] === 'ws').props.title, '握手超时', '失败项 detail 放 title')
+assert.equal(titleDot(), 'fy-dot-warn', '有失败项 → 卡头状态点降为 warn')
+
+// 自检请求失败（api 抛错）→ err 状态点
+delete RESPONSES['/dsh-feiyu/api/esp32/selfcheck']
+await btnByText('自检').props.onClick()
+await rerender()
+assert.equal(titleDot(), 'fy-dot-off', '自检失败（接口抛错）→ 状态点为 off')
+
+// 白名单：回车添加（trim + 小写），POST { esp32: { allowDevices } }
+const allowInput = () => inputsOf(tree).find((n) => n.props['aria-label'] === 'allow-device')
+assert.equal(allowInput().props.placeholder, '添加 Device-Id')
+allowInput().props.onChange({ target: { value: ' AA:BB:EE ' } })
+await rerender()
+fetchPosts.length = 0
+await allowInput().props.onKeyDown({ key: 'Enter', preventDefault() {} })
+await rerender()
+const wlPost = fetchPosts.find((p) => p.url === '/dsh-feiyu/api/config' && String(p.body).includes('allowDevices'))
+assert.ok(wlPost, '添加设备应 POST /config')
+assert.deepEqual(JSON.parse(wlPost.body), { esp32: { allowDevices: ['aa:bb:dd', 'aa:bb:ee'] } })
+// 重复添加不再请求
+fetchPosts.length = 0
+allowInput().props.onChange({ target: { value: 'AA:BB:EE' } })
+await rerender()
+await allowInput().props.onKeyDown({ key: 'Enter', preventDefault() {} })
+assert.equal(fetchPosts.length, 0, '重复 Device-Id 不应再次保存')
+// 删除
+const removeBtn = collect2(tree, (n) => n.props['aria-label'] === '移除 aa:bb:dd')[0]
+assert.ok(removeBtn, '已加入的 Device-Id 应有可删除 chip')
+fetchPosts.length = 0
+await removeBtn.props.onClick()
+await rerender()
+assert.deepEqual(JSON.parse(fetchPosts[0].body), { esp32: { allowDevices: ['aa:bb:ee'] } })
+// 在线设备一键加入：aa:bb:cc 可加入，aa:bb:dd 已被移出（可加入），aa:bb:ee 不在线
+const joinBtns = collect2(tree, (n) => String(n.props.className || '').includes('fy-esp32-join'))
+assert.equal(joinBtns.length, 2, '每个在线设备一行加入按钮')
+fetchPosts.length = 0
+await joinBtns[0].props.onClick()
+await rerender()
+assert.deepEqual(JSON.parse(fetchPosts[0].body), { esp32: { allowDevices: ['aa:bb:ee', 'aa:bb:cc'] } })
+const joinedBtn = collect2(tree, (n) => String(n.props.className || '').includes('fy-esp32-join'))[0]
+assert.ok(joinedBtn.props.className.includes('added') && joinedBtn.props.disabled, '已在白名单的设备显示已加入态')
 
 // ── 连接中心（T4）：以 test/fixtures/connections.json 四种状态为准 ─────────────
 const fs = await import('node:fs')
@@ -442,7 +517,7 @@ assert.equal(CT.deriveConnections(null).length, 5, '空输入不抛错')
   assert.ok(heads.some((x) => x.includes('基础') && x.startsWith('▾')), '基础默认展开')
   assert.ok(heads.some((x) => x.includes('平台') && x.startsWith('▾')), '平台默认展开')
   assert.ok(heads.some((x) => x.includes('高级') && x.startsWith('▸')), '高级默认折叠')
-  assert.equal(collect(gt, (n) => String(n.props.className || '').includes('fy-switch')).length, 33, '折叠不影响开关总数（31 + ESP32 providers 块在后段 fixture 下多出的 2 个）')
+  assert.equal(collect(gt, (n) => String(n.props.className || '').includes('fy-switch')).length, 31, '折叠不影响开关总数（ESP32 providers 自动启用开关已并入测试按钮，不再计数）')
   assert.ok(allText(groups.find((g) => (g.children[0].children || []).join('') === '▾ 平台')).includes('QQ 主动搭话'), '主动搭话应在平台组')
   assert.ok(!allText(groups.find((g) => allText(g).includes('当前音色'))).includes('主动搭话') || allText(groups.find((g) => allText(g).includes('当前音色'))).indexOf('QQ 主动搭话') === -1, '主动搭话不应在音色卡')
   assert.ok(!allText(gt).includes('NapCat\\cache'), '不再写死二维码路径')
