@@ -403,18 +403,16 @@ textarea.fy-input{width:100%;min-height:136px;resize:vertical;line-height:1.65;f
 		}
 
 		// ===== FreeBrowse =====
-		// 抖音 / B站 共用的"自由刷"四行（自由刷、不限量、最大条数、最长时长），由旧 DouyinCard / BiliCard 里两份重复代码参数化而来。
-		// 只渲染 4 个 Row（Fragment），外层标题/折叠由调用方决定。toggleFreeRoam(platform, on) 是旧代码里启停服务的回调（可选）。
+		// 抖音 / B站 共用的"自由刷"四行（启用、不限量、最大条数、最长时长）。外层标题/折叠由调用方决定。
+		// toggleFreeRoam(platform, on) 是旧代码里启停服务的回调（可选）。"不限量"开启时两个数值框置灰。
 		const FREE_BROWSE = {
 			douyin: {
 				cfgKey: "douyin", svc: "douyin", pre: "douyin",
-				onHint: "开着就一直刷，看到有意思的抖音私信发你",
 				onMsg: "已开启抖音自由刷", offMsg: "已关闭抖音自由刷",
 				videosMsg: "抖音自由刷条数已保存", minutesMsg: "抖音自由刷时长已保存",
 			},
 			bili: {
 				cfgKey: "bilibili", svc: "bilibili", pre: "bili",
-				onHint: "开着就一直刷，评论区 @ 你",
 				onMsg: "已开启 B站自由刷", offMsg: "已关闭 B站自由刷",
 				videosMsg: "B站自由刷条数已保存", minutesMsg: "B站自由刷时长已保存",
 			},
@@ -424,42 +422,35 @@ textarea.fy-input{width:100%;min-height:136px;resize:vertical;line-height:1.65;f
 			const c = FREE_BROWSE[props.platform];
 			const kRoam = c.pre + "FreeRoam", kUnl = c.pre + "Unlimited", kVid = c.pre + "MaxVideos", kMin = c.pre + "MaxMinutes";
 			const patch = (k, v) => ({ [c.cfgKey]: { freeRoam: { [k]: v } } });
+			const set = (k, v) => setDraft(Object.assign({}, draft, { [k]: v }));
 			return h(react.Fragment, null,
-				h(Row, { label: "自由刷" },
-					h(Switch, {
+				h(Field, { label: "启用" },
+					h(Toggle, {
 						on: draft[kRoam],
 						label: kRoam,
 						onChange: (v) => {
-							setDraft(Object.assign({}, draft, { [kRoam]: v }));
+							set(kRoam, v);
 							save(patch("enabled", v), v ? c.onMsg : c.offMsg);
 							if (toggleFreeRoam) toggleFreeRoam(c.svc, v);
 						},
-					}),
-					h("span", { className: "fy-hint", style: { marginTop: 0 } }, c.onHint)),
-				h(Row, { label: "不限量" },
-					h(Switch, {
+					})),
+				h(Field, { label: "不限量" },
+					h(Toggle, {
 						on: draft[kUnl],
 						label: kUnl,
 						onChange: (v) => {
-							setDraft(Object.assign({}, draft, { [kUnl]: v }));
+							set(kUnl, v);
 							save(patch("unlimited", v), v ? "自由：不限条数/时长" : "按下面限度刷");
 						},
-					}),
-					h("span", { className: "fy-hint", style: { marginTop: 0 } }, "自由选项（默认开）")),
-				h(Row, { label: "最大条数" },
-					h("input", {
-						className: "fy-input fy-w-sm", type: "number", min: 0, value: draft[kVid], placeholder: "0",
-						onChange: (e) => setDraft(Object.assign({}, draft, { [kVid]: e.target.value })),
-						onBlur: () => save(patch("maxVideos", Number(draft[kVid]) || 0), c.videosMsg),
-					}),
-					h("span", { className: "fy-hint", style: { marginTop: 0 } }, "0 = 不限（关掉「不限量」才按这个数）")),
-				h(Row, { label: "最长时长" },
-					h("input", {
-						className: "fy-input fy-w-sm", type: "number", min: 0, value: draft[kMin], placeholder: "0",
-						onChange: (e) => setDraft(Object.assign({}, draft, { [kMin]: e.target.value })),
-						onBlur: () => save(patch("maxMinutes", Number(draft[kMin]) || 0), c.minutesMsg),
-					}),
-					h("span", { className: "fy-hint", style: { marginTop: 0 } }, "分钟，0 = 不限")));
+					})),
+				h(NumberField, {
+					label: "最大条数", suffix: "条", value: draft[kVid], min: 0, unlimited: !!draft[kUnl],
+					onCommit: (n) => { set(kVid, n); save(patch("maxVideos", n), c.videosMsg); },
+				}),
+				h(NumberField, {
+					label: "最长时长", suffix: "分钟", value: draft[kMin], min: 0, unlimited: !!draft[kUnl],
+					onCommit: (n) => { set(kMin, n); save(patch("maxMinutes", n), c.minutesMsg); },
+				}));
 		}
 
 		// ── 连接中心（契约：docs/2026-11-12-connection-center-contract.md）─────────
@@ -1534,66 +1525,94 @@ textarea.fy-input{width:100%;min-height:136px;resize:vertical;line-height:1.65;f
 						h("span", { className: "fy-hint", style: { marginTop: 0 } }, "天/次 · 更新 persona 自我迭代区"))));
 		}
 
+		// ===== QuotaRow / isZeroNum（B站·抖音卡共用）=====
+		// 数值是否为"显式 0"（=不限）：空串不算（空串落到默认值）
+		function isZeroNum(v) { return v !== null && v !== undefined && String(v).trim() !== "" && Number(v) === 0; }
+
+		// 一行 = 标签 + 开关 + 日额度输入框(+单位后缀) + 同行"不限"小开关。输入本地缓冲，失焦才 onCommit(归一化数)。
+		// props: label, toggleLabel, on, danger, onToggle(v), value, suffix, dflt, max, onCommit(n)
+		function QuotaRow(props) {
+			const [text, setText] = useState(null);
+			const zero = isZeroNum(props.value);
+			const shown = text === null ? (props.value === null || props.value === undefined ? "" : props.value) : text;
+			const commit = () => {
+				if (text === null) return;
+				let n = normNum(text, props.dflt);
+				if (props.max !== undefined && n > props.max) n = props.max;
+				setText(null);
+				props.onCommit(n);
+			};
+			return h(Field, { label: props.label },
+				h(Toggle, { on: props.on, label: props.toggleLabel, danger: props.danger, onChange: props.onToggle }),
+				h("input", {
+					className: "fy-input fy-w-xs", type: "number", min: 0, max: props.max, value: shown,
+					disabled: zero, onChange: (e) => setText(e.target.value), onBlur: commit,
+				}),
+				props.suffix ? h("span", { className: "fy-suffix" }, props.suffix) : null,
+				h("span", { className: "fy-unl" },
+					h(Toggle, { on: zero, label: "不限", onChange: (v) => props.onCommit(v ? 0 : props.dflt) }),
+					h("span", { className: "fy-unl-label" }, "不限")));
+		}
+
 		// ===== DouyinCard =====
 		function DouyinCard(props) {
 			const { draft, setDraft, save, busy, startWatch, restartService, toggleFreeRoam } = props;
+			const set = (o) => setDraft(Object.assign({}, draft, o));
 
 			// 抖音
-			return h(Card, {
-				title: "抖音",
-				hint: "刷视频 → 自主决策 →（可选）分享给主人 / 发评论 / 私信陪聊。外发默认全关。",
-			},
-				h(Row, { label: "自主观看" },
+			return h(ChannelCard, { id: "fy-ch-douyin", title: "抖音", state: props.state || "off", action: props.action },
+				h(Field, { label: "自主观看" },
 					h("button", { className: "fy-btn primary", disabled: busy === "watch", onClick: startWatch },
-						busy === "watch" ? "启动中…" : "开始看（10 分钟）"),
-					h("span", { className: "fy-hint", style: { marginTop: 0 } }, "feed → 自主决策 → 记兴趣（后台跑，日志 ~/.feiyu-ai/watch.log）")),
-				h(Row, { label: "静默模式" },
-					h(Switch, {
+						busy === "watch" ? "启动中…" : "开始看（10 分钟）")),
+				h(Field, { label: "静默模式" },
+					h(Toggle, {
 						on: draft.douyinSilent,
 						label: "douyinSilent",
 						onChange: (v) => {
-							setDraft(Object.assign({}, draft, { douyinSilent: v }));
+							set({ douyinSilent: v });
 							save({ douyin: { watch: { silent: v } } }, v ? "已开启静默：刷/看/分享都无头后台跑" : "已关闭静默（有头，可看操作过程）");
 						},
-					}),
-					h("span", { className: "fy-hint", style: { marginTop: 0 } }, "无头后台：不弹 Chrome")),
-				h(Row, { label: "分享给主人" },
-					h(Switch, {
+					})),
+				h(Field, { label: "分享给主人" },
+					h(Toggle, {
 						on: draft.douyinShare,
 						label: "douyinShare",
 						onChange: (v) => {
-							setDraft(Object.assign({}, draft, { douyinShare: v }));
+							set({ douyinShare: v });
 							save({ douyin: { shareToOwner: v } }, v ? "已开启：看到有意思的视频会抖音私信发你" : "已关闭分享给主人");
 						},
-					}),
-					h("span", { className: "fy-hint", style: { marginTop: 0 } }, "抖音私信发你链接+她的评论（替代 @）")),
-				h(Row, { label: "自主评论" },
-					h(Switch, {
+					})),
+				h(NumberField, {
+					label: "分享上限", suffix: "条/天", value: draft.douyinShareDaily, min: 0, max: 50, dflt: 5,
+					unlimited: isZeroNum(draft.douyinShareDaily),
+					onUnlimited: (on) => { set({ douyinShareDaily: on ? 0 : 5 }); save({ douyin: { shareDaily: on ? 0 : 5 } }, "每天分享上限已保存"); },
+					onCommit: (n) => { set({ douyinShareDaily: n }); save({ douyin: { shareDaily: n } }, "每天分享上限已保存"); },
+				}),
+				h(Field, { label: "自主评论" },
+					h(Toggle, {
 						on: draft.douyinAutoComment,
 						label: "douyinAutoComment",
 						onChange: (v) => {
-							setDraft(Object.assign({}, draft, { douyinAutoComment: v }));
+							set({ douyinAutoComment: v });
 							save({ douyin: { autoComment: v } }, v ? "已开启：刷到也会以自学习人格发评论" : "已关闭自主评论");
 						},
-					}),
-					h("span", { className: "fy-hint", style: { marginTop: 0 } }, "douyin.dryRun=false 才真发")),
-				h(Row, { label: "私信陪聊" },
-					h(Switch, {
+					})),
+				h(Field, { label: "私信陪聊" },
+					h(Toggle, {
 						on: draft.douyinDm,
 						label: "douyinDm",
 						onChange: (v) => {
-							setDraft(Object.assign({}, draft, { douyinDm: v }));
+							set({ douyinDm: v });
 							save({ douyin: { dm: { enabled: v } } }, v ? "私信陪聊已开启" : "私信陪聊已关闭");
 							restartService("douyin-dm", v ? "start" : "stop");
 						},
-					}),
-					h("span", { className: "fy-hint", style: { marginTop: 0 } }, "常驻轮询主人私信，新消息自动回")),
-				h(Row, { label: "随 DSH 自启" },
-					h(Switch, {
+					})),
+				h(Field, { label: "随 DSH 自启" },
+					h(Toggle, {
 						on: draft.douyinDmStartWithDsh,
 						label: "douyinDmStartWithDsh",
 						onChange: async (v) => {
-							setDraft(Object.assign({}, draft, { douyinDmStartWithDsh: v }));
+							set({ douyinDmStartWithDsh: v });
 							// 开"自启"时顺手把私信也打开：否则自启只是"开机后再关一次"
 							const patch = v ? { dm: { startWithDsh: true, enabled: true } } : { dm: { startWithDsh: false } };
 							const ok = await save({ douyin: patch }, v ? "私信陪聊随 DSH 自启（退出时不会被自动关掉）" : "私信陪聊不再自启：DSH 退出时会自动关掉");
@@ -1602,225 +1621,92 @@ textarea.fy-input{width:100%;min-height:136px;resize:vertical;line-height:1.65;f
 								restartService("douyin-dm", "start");
 							}
 						},
-					}),
-					h("span", { className: "fy-hint", style: { marginTop: 0 } }, "关着的话，DSH 一重启私信陪聊就被自动关掉（10-25 那个「还是没回复」就是这原因）")),
-				h(Row, { label: "评论 @ 通知" },
-					h(Switch, {
-						on: draft.douyinAt,
-						label: "douyinAt",
-						onChange: (v) => {
-							setDraft(Object.assign({}, draft, { douyinAt: v }));
-							save({ douyin: { atMention: v } }, v ? "已开启评论 @（风控风险高）" : "已关闭评论 @（推荐，防风控）");
-						},
-					}),
-					h("span", { className: "fy-hint", style: { marginTop: 0 } }, "抖音评论带 @ 是风控主因，默认关")),
-				h(Row, { label: "每次条数" },
-					h("input", {
-						className: "fy-input fy-w-sm", type: "number", min: 0, max: 5, value: draft.douyinCount,
-						onChange: (e) => setDraft(Object.assign({}, draft, { douyinCount: e.target.value })),
-						onBlur: () => save({ douyin: { maxPerRun: String(draft.douyinCount).trim() === "" ? 2 : Math.max(0, Number(draft.douyinCount) || 0) } }, "抖音条数已保存（0 = 不限）"),
-					}),
-					h("span", { className: "fy-hint", style: { marginTop: 0 } }, "一轮刷几条（0 = 不限，防 shadowban 慎全开）")),
-				h(Row, { label: "分享上限" },
-					h("input", {
-						className: "fy-input fy-w-sm", type: "number", min: 0, max: 50, value: draft.douyinShareDaily,
-						onChange: (e) => setDraft(Object.assign({}, draft, { douyinShareDaily: e.target.value })),
-						onBlur: () => save({ douyin: { shareDaily: String(draft.douyinShareDaily).trim() === "" ? 5 : Math.max(0, Number(draft.douyinShareDaily) || 0) } }, "每天分享上限已保存（0 = 不限）"),
-					}),
-					h("span", { className: "fy-hint", style: { marginTop: 0 } }, "条/天，抖音私信卡片（0 = 不限）")),
-				h("div", { className: "fy-sub", style: { marginTop: 10 } }, "自由刷 · 大肥鱼自己逛"),
-				h(Row, { label: "自由刷" },
-					h(Switch, {
-						on: draft.douyinFreeRoam,
-						label: "douyinFreeRoam",
-						onChange: (v) => {
-							setDraft(Object.assign({}, draft, { douyinFreeRoam: v }));
-							save({ douyin: { freeRoam: { enabled: v } } }, v ? "已开启抖音自由刷" : "已关闭抖音自由刷");
-							toggleFreeRoam("douyin", v);
-						},
-					}),
-					h("span", { className: "fy-hint", style: { marginTop: 0 } }, "开着就一直刷，看到有意思的抖音私信发你")),
-				h(Row, { label: "不限量" },
-					h(Switch, {
-						on: draft.douyinUnlimited,
-						label: "douyinUnlimited",
-						onChange: (v) => {
-							setDraft(Object.assign({}, draft, { douyinUnlimited: v }));
-							save({ douyin: { freeRoam: { unlimited: v } } }, v ? "自由：不限条数/时长" : "按下面限度刷");
-						},
-					}),
-					h("span", { className: "fy-hint", style: { marginTop: 0 } }, "自由选项（默认开）")),
-				h(Row, { label: "最大条数" },
-					h("input", {
-						className: "fy-input fy-w-sm", type: "number", min: 0, value: draft.douyinMaxVideos, placeholder: "0",
-						onChange: (e) => setDraft(Object.assign({}, draft, { douyinMaxVideos: e.target.value })),
-						onBlur: () => save({ douyin: { freeRoam: { maxVideos: Number(draft.douyinMaxVideos) || 0 } } }, "抖音自由刷条数已保存"),
-					}),
-					h("span", { className: "fy-hint", style: { marginTop: 0 } }, "0 = 不限（关掉「不限量」才按这个数）")),
-				h(Row, { label: "最长时长" },
-					h("input", {
-						className: "fy-input fy-w-sm", type: "number", min: 0, value: draft.douyinMaxMinutes, placeholder: "0",
-						onChange: (e) => setDraft(Object.assign({}, draft, { douyinMaxMinutes: e.target.value })),
-						onBlur: () => save({ douyin: { freeRoam: { maxMinutes: Number(draft.douyinMaxMinutes) || 0 } } }, "抖音自由刷时长已保存"),
-					}),
-					h("span", { className: "fy-hint", style: { marginTop: 0 } }, "分钟，0 = 不限")));
+					})),
+				h(NumberField, {
+					label: "每次条数", suffix: "条/轮", value: draft.douyinCount, min: 0, max: 5, dflt: 2,
+					unlimited: isZeroNum(draft.douyinCount),
+					onUnlimited: (on) => { set({ douyinCount: on ? 0 : 2 }); save({ douyin: { maxPerRun: on ? 0 : 2 } }, "抖音条数已保存"); },
+					onCommit: (n) => { set({ douyinCount: n }); save({ douyin: { maxPerRun: n } }, "抖音条数已保存"); },
+				}),
+				h(Group, { sub: true, title: "自由刷", defaultOpen: true },
+					h(FreeBrowse, { platform: "douyin", draft: draft, setDraft: setDraft, save: save, toggleFreeRoam: toggleFreeRoam })),
+				h(DangerZone, { title: "风控风险", summary: "已开 " + (draft.douyinAt ? 1 : 0) + "/1" },
+					h(Field, { label: "评论带 @" },
+						h(Toggle, {
+							danger: true,
+							on: draft.douyinAt,
+							label: "douyinAt",
+							onChange: (v) => {
+								set({ douyinAt: v });
+								save({ douyin: { atMention: v } }, v ? "已开启评论 @（风控风险高）" : "已关闭评论 @（推荐，防风控）");
+							},
+						}))));
 		}
 
 		// ===== BiliCard =====
+		// 活人感·写通道：on/max = draft 键；path/maxPath = 配置路径（bilibili.*）；dflt = 空值时默认额度，与改前一致
+		const BILI_DYK = [
+			{ label: "弹幕", on: "dykDanmaku", max: "dykDanmakuMax", suffix: "条/天", cap: 99, dflt: 5, path: ["danmaku", "enabled"], maxPath: ["danmaku", "dailyMax"], onMsg: "弹幕已开（看视频时会发）", offMsg: "弹幕已关", maxMsg: "弹幕日上限已保存" },
+			{ label: "动态", on: "dykDyn", max: "dykDynMax", suffix: "条/天", cap: 99, dflt: 2, path: ["dynamic", "enabled"], maxPath: ["dynamic", "dailyMax"], onMsg: "动态已开（早晚各一条潜水日志）", offMsg: "动态已关", maxMsg: "动态日上限已保存" },
+			{ label: "点赞", on: "dykLike", path: ["react", "like"], onMsg: "点赞已开（看过的视频顺手点）", offMsg: "点赞已关" },
+			{ label: "投币", on: "dykCoin", max: "dykCoinMax", suffix: "枚/天", cap: 99, dflt: 1, danger: true, path: ["react", "coin"], maxPath: ["react", "coinDaily"], onMsg: "投币已开（评分≥17 才投）", offMsg: "投币已关", maxMsg: "投币日上限已保存" },
+			{ label: "图片评论", on: "dykImg", max: "dykImgMax", suffix: "条/天", cap: 99, dflt: 2, path: ["imageComment", "enabled"], maxPath: ["imageComment", "dailyMax"], onMsg: "图片评论已开（贴纸→B站图床）", offMsg: "图片评论已关", maxMsg: "图片评论日上限已保存" },
+			{ label: "回评论", on: "dykReplies", max: "dykRepliesMax", suffix: "条/天", cap: 999, dflt: 10, path: ["replies", "enabled"], maxPath: ["replies", "dailyMax"], onMsg: "回评论已开（有人回我就接话）", offMsg: "回评论已关", maxMsg: "回评日上限已保存" },
+			{ label: "鱼圈社交", on: "dykFish", path: ["fishCircle", "enabled"], onMsg: "鱼圈已开（选题混入大肥鱼相关视频）", offMsg: "鱼圈已关" },
+			{ label: "关注UP", on: "dykFollow", path: ["follow", "enabled"], onMsg: "关注已开（好UP自己关注）", offMsg: "关注已关" },
+		];
+		function biliPatch(pathArr, v) {
+			let o = v;
+			for (let i = pathArr.length - 1; i >= 0; i--) o = { [pathArr[i]]: o };
+			return { bilibili: o };
+		}
 		function BiliCard(props) {
 			const { draft, setDraft, save, busy, startBiliWatch, toggleFreeRoam } = props;
+			const set = (o) => setDraft(Object.assign({}, draft, o));
+			const dykOn = BILI_DYK.filter((d) => draft[d.on]).length;
 
 			// B站
-			return h(Card, {
-				title: "B站",
-				hint: "生物钟自主刷视频；分享 = 评论里 @ 你（B站原生 at_name_to_mid，非风控点）。",
-			},
-				h(Row, { label: "分享（@ 你）" },
-					h(Switch, {
+			return h(ChannelCard, { id: "fy-ch-bili", title: "B站", state: props.state || "off", action: props.action },
+				h(Field, { label: "分享（@ 你）" },
+					h(Toggle, {
 						on: draft.shareOn,
 						label: "share",
 						onChange: (v) => {
-							setDraft(Object.assign({}, draft, { shareOn: v }));
+							set({ shareOn: v });
 							save({ share: { enabled: v } }, v ? "分享已开启" : "分享已关闭");
 						},
-					}),
-					h("span", { className: "fy-hint", style: { marginTop: 0 } }, "最低 "),
-					h("input", {
-						className: "fy-input fy-w-sm", type: "number", min: 0, max: 20, value: draft.shareMinScore,
-						onChange: (e) => setDraft(Object.assign({}, draft, { shareMinScore: e.target.value })),
-						onBlur: () => save({ share: { minScore: Number(draft.shareMinScore) || 0 } }, "分享门槛已保存"),
-					}),
-					h("span", { className: "fy-hint", style: { marginTop: 0 } }, " 分才 @ 你")),
-				h(Row, { label: "每天分享上限" },
-					h("input", {
-						className: "fy-input fy-w-sm", type: "number", min: 0, max: 10, value: draft.shareDaily,
-						onChange: (e) => setDraft(Object.assign({}, draft, { shareDaily: e.target.value })),
-						onBlur: () => save({ quota: { shareDaily: Number(draft.shareDaily) || 0 } }, "分享上限已保存"),
-					}),
-					h("span", { className: "fy-hint", style: { marginTop: 0 } }, "一天最多 @ 你几次（0 = 不限）")),
-				h(Row, { label: "静默自助刷" },
+					})),
+				h(NumberField, {
+					label: "最低分", suffix: "分", value: draft.shareMinScore, min: 0, max: 20,
+					onCommit: (n) => { set({ shareMinScore: n }); save({ share: { minScore: n } }, "分享门槛已保存"); },
+				}),
+				h(NumberField, {
+					label: "每天分享上限", suffix: "次/天", value: draft.shareDaily, min: 0, max: 10, dflt: 0,
+					unlimited: isZeroNum(draft.shareDaily),
+					onUnlimited: (on) => { set({ shareDaily: on ? 0 : 3 }); save({ quota: { shareDaily: on ? 0 : 3 } }, "分享上限已保存"); },
+					onCommit: (n) => { set({ shareDaily: n }); save({ quota: { shareDaily: n } }, "分享上限已保存"); },
+				}),
+				h(Field, { label: "静默自助刷" },
 					h("button", { className: "fy-btn", disabled: busy === "biliwatch", onClick: startBiliWatch },
-						busy === "biliwatch" ? "启动中…" : "静默刷一轮"),
-					h("span", { className: "fy-hint", style: { marginTop: 0 } }, "feed→深读→@评论（干跑/真发看 guard.dryRun）")),
-				h(Group, { sub: true, title: "自由刷 · 大肥鱼自己逛", defaultOpen: false },
-				h(Row, { label: "自由刷" },
-					h(Switch, {
-						on: draft.biliFreeRoam,
-						label: "biliFreeRoam",
-						onChange: (v) => {
-							setDraft(Object.assign({}, draft, { biliFreeRoam: v }));
-							save({ bilibili: { freeRoam: { enabled: v } } }, v ? "已开启 B站自由刷" : "已关闭 B站自由刷");
-							toggleFreeRoam("bilibili", v);
-						},
-					}),
-					h("span", { className: "fy-hint", style: { marginTop: 0 } }, "开着就一直刷，评论区 @ 你")),
-				h(Row, { label: "不限量" },
-					h(Switch, {
-						on: draft.biliUnlimited,
-						label: "biliUnlimited",
-						onChange: (v) => {
-							setDraft(Object.assign({}, draft, { biliUnlimited: v }));
-							save({ bilibili: { freeRoam: { unlimited: v } } }, v ? "自由：不限条数/时长" : "按下面限度刷");
-						},
-					}),
-					h("span", { className: "fy-hint", style: { marginTop: 0 } }, "自由选项（默认开）")),
-				h(Row, { label: "最大条数" },
-					h("input", {
-						className: "fy-input fy-w-sm", type: "number", min: 0, value: draft.biliMaxVideos, placeholder: "0",
-						onChange: (e) => setDraft(Object.assign({}, draft, { biliMaxVideos: e.target.value })),
-						onBlur: () => save({ bilibili: { freeRoam: { maxVideos: Number(draft.biliMaxVideos) || 0 } } }, "B站自由刷条数已保存"),
-					}),
-					h("span", { className: "fy-hint", style: { marginTop: 0 } }, "0 = 不限（关掉「不限量」才按这个数）")),
-				h(Row, { label: "最长时长" },
-					h("input", {
-						className: "fy-input fy-w-sm", type: "number", min: 0, value: draft.biliMaxMinutes, placeholder: "0",
-						onChange: (e) => setDraft(Object.assign({}, draft, { biliMaxMinutes: e.target.value })),
-						onBlur: () => save({ bilibili: { freeRoam: { maxMinutes: Number(draft.biliMaxMinutes) || 0 } } }, "B站自由刷时长已保存"),
-					}),
-					h("span", { className: "fy-hint", style: { marginTop: 0 } }, "分钟，0 = 不限")),
-				),
-				h(Group, { sub: true, title: "活人感 · 写通道（养好号再开，每项有日额度）", defaultOpen: false },
-				h(Row, { label: "弹幕" },
-					h(Switch, {
-						on: draft.dykDanmaku,
-						label: "dykDanmaku",
-						onChange: (v) => { setDraft(Object.assign({}, draft, { dykDanmaku: v })); save({ bilibili: { danmaku: { enabled: v } } }, v ? "弹幕已开（看视频时会发）" : "弹幕已关"); },
-					}),
-					h("input", {
-						className: "fy-input fy-w-xs", type: "number", min: 0, max: 99, value: draft.dykDanmakuMax,
-						onChange: (e) => setDraft(Object.assign({}, draft, { dykDanmakuMax: e.target.value })),
-						onBlur: () => save({ bilibili: { danmaku: { dailyMax: String(draft.dykDanmakuMax).trim() === "" ? 5 : Math.max(0, Number(draft.dykDanmakuMax) || 0) } } }, "弹幕日上限已保存（0 = 不限）"),
-					}),
-					h("span", { className: "fy-hint", style: { marginTop: 0 } }, "条/天，看视频顺手发（0 = 不限）")),
-				h(Row, { label: "动态" },
-					h(Switch, {
-						on: draft.dykDyn,
-						label: "dykDyn",
-						onChange: (v) => { setDraft(Object.assign({}, draft, { dykDyn: v })); save({ bilibili: { dynamic: { enabled: v } } }, v ? "动态已开（早晚各一条潜水日志）" : "动态已关"); },
-					}),
-					h("input", {
-						className: "fy-input fy-w-xs", type: "number", min: 0, max: 99, value: draft.dykDynMax,
-						onChange: (e) => setDraft(Object.assign({}, draft, { dykDynMax: e.target.value })),
-						onBlur: () => save({ bilibili: { dynamic: { dailyMax: String(draft.dykDynMax).trim() === "" ? 2 : Math.max(0, Number(draft.dykDynMax) || 0) } } }, "动态日上限已保存（0 = 不限）"),
-					}),
-					h("span", { className: "fy-hint", style: { marginTop: 0 } }, "条/天，09:30/21:30 + 复盘同步（0 = 不限）")),
-				h(Row, { label: "点赞" },
-					h(Switch, {
-						on: draft.dykLike,
-						label: "dykLike",
-						onChange: (v) => { setDraft(Object.assign({}, draft, { dykLike: v })); save({ bilibili: { react: { like: v } } }, v ? "点赞已开（看过的视频顺手点）" : "点赞已关"); },
-					}),
-					h("span", { className: "fy-hint", style: { marginTop: 0 } }, "深读过的视频自动点赞，10 条/天")),
-				h(Row, { label: "投币" },
-					h(Switch, {
-						on: draft.dykCoin,
-						label: "dykCoin",
-						onChange: (v) => { setDraft(Object.assign({}, draft, { dykCoin: v })); save({ bilibili: { react: { coin: v } } }, v ? "投币已开（评分≥17 才投）" : "投币已关"); },
-					}),
-					h("input", {
-						className: "fy-input fy-w-xs", type: "number", min: 0, max: 99, value: draft.dykCoinMax,
-						onChange: (e) => setDraft(Object.assign({}, draft, { dykCoinMax: e.target.value })),
-						onBlur: () => save({ bilibili: { react: { coinDaily: String(draft.dykCoinMax).trim() === "" ? 1 : Math.max(0, Number(draft.dykCoinMax) || 0) } } }, "投币日上限已保存（0 = 不限）"),
-					}),
-					h("span", { className: "fy-hint", style: { marginTop: 0 } }, "枚/天，真金白银谨慎（0 = 不限）")),
-				h(Row, { label: "图片评论" },
-					h(Switch, {
-						on: draft.dykImg,
-						label: "dykImg",
-						onChange: (v) => { setDraft(Object.assign({}, draft, { dykImg: v })); save({ bilibili: { imageComment: { enabled: v } } }, v ? "图片评论已开（贴纸→B站图床）" : "图片评论已关"); },
-					}),
-					h("input", {
-						className: "fy-input fy-w-xs", type: "number", min: 0, max: 99, value: draft.dykImgMax,
-						onChange: (e) => setDraft(Object.assign({}, draft, { dykImgMax: e.target.value })),
-						onBlur: () => save({ bilibili: { imageComment: { dailyMax: String(draft.dykImgMax).trim() === "" ? 2 : Math.max(0, Number(draft.dykImgMax) || 0) } } }, "图片评论日上限已保存（0 = 不限）"),
-					}),
-					h("span", { className: "fy-hint", style: { marginTop: 0 } }, "条/天，act pic 命令用（0 = 不限）")),
-				h(Row, { label: "回评论" },
-					h(Switch, {
-						on: draft.dykReplies,
-						label: "dykReplies",
-						onChange: (v) => { setDraft(Object.assign({}, draft, { dykReplies: v })); save({ bilibili: { replies: { enabled: v } } }, v ? "回评论已开（有人回我就接话）" : "回评论已关"); },
-					}),
-					h("input", {
-						className: "fy-input fy-w-xs", type: "number", min: 0, max: 999, value: draft.dykRepliesMax,
-						onChange: (e) => setDraft(Object.assign({}, draft, { dykRepliesMax: e.target.value })),
-						onBlur: () => save({ bilibili: { replies: { dailyMax: String(draft.dykRepliesMax).trim() === "" ? 10 : Math.max(0, Number(draft.dykRepliesMax) || 0) } } }, "回评日上限已保存（0 = 不限）"),
-					}),
-					h("span", { className: "fy-hint", style: { marginTop: 0 } }, "条/天，node feiyu.mjs replies（0 = 不限）")),
-				h(Row, { label: "鱼圈社交" },
-					h(Switch, {
-						on: draft.dykFish,
-						label: "dykFish",
-						onChange: (v) => { setDraft(Object.assign({}, draft, { dykFish: v })); save({ bilibili: { fishCircle: { enabled: v } } }, v ? "鱼圈已开（选题混入大肥鱼相关视频）" : "鱼圈已关"); },
-					}),
-					h("span", { className: "fy-hint", style: { marginTop: 0 } }, "去同类鱼聚集地刷存在感")),
-				h(Row, { label: "关注UP" },
-					h(Switch, {
-						on: draft.dykFollow,
-						label: "dykFollow",
-						onChange: (v) => { setDraft(Object.assign({}, draft, { dykFollow: v })); save({ bilibili: { follow: { enabled: v } } }, v ? "关注已开（好UP自己关注）" : "关注已关"); },
-					}),
-					h("span", { className: "fy-hint", style: { marginTop: 0 } }, "社交图谱自己长"))));
+						busy === "biliwatch" ? "启动中…" : "静默刷一轮")),
+				h(Group, { sub: true, title: "自由刷", defaultOpen: true },
+					h(FreeBrowse, { platform: "bili", draft: draft, setDraft: setDraft, save: save, toggleFreeRoam: toggleFreeRoam })),
+				h(DangerZone, { title: "活人感 · 写通道", summary: "已开 " + dykOn + "/" + BILI_DYK.length },
+					BILI_DYK.map((d) => {
+						const toggle = (v) => {
+							set({ [d.on]: v });
+							save(biliPatch(d.path, v), v ? d.onMsg : d.offMsg);
+						};
+						if (!d.max) {
+							return h(Field, { key: d.on, label: d.label },
+								h(Toggle, { on: draft[d.on], label: d.on, danger: d.danger, onChange: toggle }));
+						}
+						return h(QuotaRow, {
+							key: d.on, label: d.label, toggleLabel: d.on, on: draft[d.on], danger: d.danger, onToggle: toggle,
+							value: draft[d.max], suffix: d.suffix, max: d.cap, dflt: d.dflt,
+							onCommit: (n) => { set({ [d.max]: n }); save(biliPatch(d.maxPath, n), d.maxMsg); },
+						});
+					})));
 		}
 
 		// ===== FeiyuSection =====
@@ -2239,6 +2125,7 @@ textarea.fy-input{width:100%;min-height:136px;resize:vertical;line-height:1.65;f
 			CONN_API: CONN_API, deriveConnections: deriveConnections, createLoginFlow: createLoginFlow,
 			normNum: normNum, Field: Field, NumberField: NumberField, Toggle: Toggle, Segmented: Segmented, StatusDot: StatusDot,
 			ChannelCard: ChannelCard, DangerZone: DangerZone, FreeBrowse: FreeBrowse, useSave: useSave,
+			DouyinCard: DouyinCard, BiliCard: BiliCard,
 		};
 		return module.exports;
 	},
