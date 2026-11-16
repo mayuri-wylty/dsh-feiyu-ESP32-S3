@@ -1333,79 +1333,82 @@ textarea.fy-input{width:100%;min-height:136px;resize:vertical;line-height:1.65;f
 		}
 
 		// ===== QqCard =====
+		// 通道卡：卡头 = 名称 + 状态点 + 动作槽（state/action 由 Lead 在 T7 接线）；QQ 主动搭话并入本卡
 		function QqCard(props) {
 			const { draft, setDraft, saveProactive } = props;
+			const maxUnlimited = Number(draft.qqProactiveMax) === 0;
 
-			// QQ 主动搭话（从音色卡移出）
-			return h(Card, { title: "QQ 主动搭话", hint: "安静久了她会主动找你；正聊不打扰。" },
-				h(Row, { label: "主动搭话" },
-					h(Switch, {
+			return h(ChannelCard, { id: "fy-qq", title: "QQ", state: props.state || "off", action: props.action },
+				h(Field, { label: "主动搭话" },
+					h(Toggle, {
 						on: draft.qqProactive,
 						label: "qqProactive",
-						onChange: (v) => { setDraft(Object.assign({}, draft, { qqProactive: v })); saveProactive({ enabled: v }, v ? "主动搭话已开：安静久了她会主动找你" : "主动搭话已关"); },
-					}),
-					h("input", {
-						className: "fy-input fy-w-xs", type: "number", min: 0, max: 20, value: draft.qqProactiveMax,
-						onChange: (e) => setDraft(Object.assign({}, draft, { qqProactiveMax: e.target.value })),
-						onBlur: () => saveProactive({ dailyMax: Math.max(0, Number(draft.qqProactiveMax) || 0) }, "主动搭话日上限已保存（0 = 不限）"),
-					}),
-					h("input", {
-						className: "fy-input fy-w-xs", type: "number", min: 1, max: 1440, value: draft.qqProactiveGap,
-						onChange: (e) => setDraft(Object.assign({}, draft, { qqProactiveGap: e.target.value })),
-						onBlur: () => saveProactive({ minGapMin: Math.max(1, Number(draft.qqProactiveGap) || 150) }, "两次搭话最小间隔已保存（分钟，最小 1）"),
-					}),
-					h("span", { className: "fy-hint", style: { marginTop: 0 } }, "条/天 · 间隔分钟（正聊不打扰；夜间限制已关，全天可搭话）")));
+						onChange: (v) => { setDraft(Object.assign({}, draft, { qqProactive: v })); saveProactive({ enabled: v }, v ? "主动搭话已开" : "主动搭话已关"); },
+					})),
+				h(NumberField, {
+					label: "每日上限", suffix: "条/天", value: draft.qqProactiveMax, unlimited: maxUnlimited,
+					onUnlimited: (v) => {
+						const n = v ? 0 : 3;
+						setDraft(Object.assign({}, draft, { qqProactiveMax: n }));
+						saveProactive({ dailyMax: n }, "主动搭话日上限已保存");
+					},
+					onCommit: (n) => {
+						setDraft(Object.assign({}, draft, { qqProactiveMax: n }));
+						saveProactive({ dailyMax: Math.max(0, n) }, "主动搭话日上限已保存");
+					},
+				}),
+				h(NumberField, {
+					label: "最小间隔", suffix: "分钟", value: draft.qqProactiveGap, dflt: 150,
+					onCommit: (n) => {
+						setDraft(Object.assign({}, draft, { qqProactiveGap: n }));
+						saveProactive({ minGapMin: Math.max(1, n || 150) }, "两次搭话最小间隔已保存");
+					},
+				}));
 		}
 
 		// ===== WechatCard =====
+		// 通道卡（微信是 UI 自动化）：节奏档 / 合并窗口 / 上下文条数 / 智能判断
 		function WechatCard(props) {
 			const { draft, setDraft, save } = props;
 
-			// 微信（UI 自动化，节奏与合并窗口直接决定像不像人、回得快不快）
-			return h(Card, {
-				title: "微信",
-				hint: "微信是 UI 自动化（不是协议）。节奏档 = 两条消息之间的最小间隔；合并窗口 = 等对方把话说完。改完点运行状态里的「重启 QQ / 微信」生效。",
-			},
-				h(Row, { label: "节奏档位" },
-					h("select", {
-						className: "fy-input",
+			return h(ChannelCard, { id: "fy-wechat", title: "微信", state: props.state || "off", action: props.action },
+				h(Field, { label: "节奏档位" },
+					h(Segmented, {
+						options: [
+							{ value: "calm", label: "很慢" },
+							{ value: "natural", label: "稳" },
+							{ value: "fast", label: "快" },
+							{ value: "off", label: "秒回", danger: true },
+						],
 						value: draft.wxRhythm,
-						onChange: (e) => {
-							const v = e.target.value;
+						onChange: (v) => {
 							setDraft(Object.assign({}, draft, { wxRhythm: v }));
-							save({ wechat: { rhythm: v } }, "微信节奏已切到 " + v + "（重启微信服务生效）");
+							save({ wechat: { rhythm: v } }, "微信节奏已切到 " + v);
 						},
+					})),
+				h(NumberField, {
+					label: "合并窗口", suffix: "秒", value: draft.wxMerge, dflt: 3, min: 0,
+					onCommit: (n) => {
+						setDraft(Object.assign({}, draft, { wxMerge: n }));
+						save({ wechat: { merge_window_sec: n } }, "合并窗口已保存");
 					},
-					h("option", { value: "fast" }, "fast · 快（1.5 秒/条，推荐）"),
-					h("option", { value: "off" }, "off · 秒回（最快，无节流，风控风险高）"),
-					h("option", { value: "natural" }, "natural · 稳（4~7 秒/条）"),
-						h("option", { value: "calm" }, "calm · 很慢（长时间挂机）"))),
-				h(Row, { label: "合并窗口" },
-					h("input", {
-						className: "fy-input fy-w-sm", type: "number", min: 1, max: 10, step: 0.5,
-						value: draft.wxMerge,
-						onChange: (e) => setDraft(Object.assign({}, draft, { wxMerge: e.target.value })),
-						onBlur: () => save({ wechat: { merge_window_sec: String(draft.wxMerge).trim() === "" ? 3 : Math.max(0, Number(draft.wxMerge) || 0) } }, "合并窗口已保存"),
-					}),
-					h("span", { className: "fy-hint", style: { marginTop: 0 } }, "对方说完几秒后才回；期间又发就继续等（最长 12 秒）")),
-				h(Row, { label: "上下文条数" },
-					h("input", {
-						className: "fy-input fy-w-sm", type: "number", min: 4, max: 30,
-						value: draft.wxContext,
-						onChange: (e) => setDraft(Object.assign({}, draft, { wxContext: e.target.value })),
-						onBlur: () => save({ wechat: { context_n: String(draft.wxContext).trim() === "" ? 12 : Math.max(0, Number(draft.wxContext) || 0) } }, "上下文条数已保存（下一条消息生效）"),
-					}),
-					h("span", { className: "fy-hint", style: { marginTop: 0 } }, "往前带多少条对话来理解语境")),
-				h(Row, { label: "自己判断该不该接" },
-					h(Switch, {
+				}),
+				h(NumberField, {
+					label: "上下文条数", suffix: "条", value: draft.wxContext, dflt: 12, min: 0,
+					onCommit: (n) => {
+						setDraft(Object.assign({}, draft, { wxContext: n }));
+						save({ wechat: { context_n: n } }, "上下文条数已保存");
+					},
+				}),
+				h(Field, { label: "自己判断该不该接" },
+					h(Toggle, {
 						on: draft.wxSkip,
 						label: "smart_skip",
 						onChange: (v) => {
 							setDraft(Object.assign({}, draft, { wxSkip: v }));
-							save({ wechat: { smart_skip: v } }, v ? "以后她会先判断再决定回不回" : "以后每条都回");
+							save({ wechat: { smart_skip: v } }, v ? "智能判断已开" : "每条都回");
 						},
-					}),
-					h("span", { className: "fy-hint", style: { marginTop: 0 } }, "关掉就退回「每句都回」")));
+					})));
 		}
 
 		// ===== FreedomZone =====
