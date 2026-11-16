@@ -184,7 +184,7 @@ const allText = (node) => {
 
 assert.ok(!dump.includes('载入失败'), '不该走到错误态：' + allText(tree).slice(0, 200))
 const text = allText(tree)
-for (const must of ['大肥鱼', '运行状态', '平台开关', '主人', '音色', '微信', '作息与限额', '角色设定', '记忆库']) {
+for (const must of ['大肥鱼', '运行状态', '平台开关', '主人', '音色', '微信', '作息', '角色设定', '记忆库']) {
   assert.ok(text.includes(must), '缺少区块：' + must)
 }
 for (const must of ['3082864371', 'sunshine_girl', '20:00', '在的，主人。', '运行中']) {

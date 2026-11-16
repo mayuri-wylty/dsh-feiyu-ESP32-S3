@@ -202,6 +202,8 @@ textarea.fy-input{width:100%;min-height:136px;resize:vertical;line-height:1.65;f
 .fy-zone-head{display:flex;align-items:center;gap:10px;align-self:flex-start;background:transparent;border:0;padding:2px 0;font:inherit;font-size:13px;font-weight:600;color:inherit;cursor:pointer}
 .fy-zone-summary{font-size:11.5px;font-weight:400;color:var(--dsw-alias-label-tertiary,#98a2b3)}
 .fy-zone-body{flex-direction:column;gap:0}
+.fy-general-group{font-size:12px;font-weight:600;color:var(--dsw-alias-label-secondary,#8b95a5);margin:12px 0 2px}
+.fy-general-group:first-of-type{margin-top:0}
 `;
 
 		function useStyles() {
@@ -1060,18 +1062,36 @@ textarea.fy-input{width:100%;min-height:136px;resize:vertical;line-height:1.65;f
 		}
 
 		// ===== GeneralCards =====
-		// part: "base"（主人、大脑、音色）| "persona"（角色设定、记忆库）。两段在面板里分处「基础」「高级」分组，所以拆成两个 part。
+		// part: "base"（主人、大脑、音色）| "persona"（角色设定、记忆库）。两段分处面板不同位置，所以拆成两个 part。
 		function GeneralCards(props) {
 			const { cfg, draft, setDraft, voices, busy, setBusy, save, flash, saveLlmKey, testVoice, persona, setPersona, savePersona, mem, setMem } = props;
+			const { commitProps } = useSave({ save: save });
+			const trim = (v) => String(v == null ? "" : v).trim();
+			const clamp01 = (v) => Math.max(0, Math.min(1, Number(v) || 0));
+			// 文本框：受控值 + 失焦自动保存（commitProps 提供 className/onBlur，含闪色）；guardEmpty = 空值不保存
+			const textProps = (draftKey, value, path, label, cls, placeholder, guardEmpty) => {
+				const cp = commitProps(path, label, { className: cls, parse: trim });
+				return {
+					className: cp.className, value: value, placeholder: placeholder,
+					onChange: (e) => setDraft(Object.assign({}, draft, { [draftKey]: e.target.value })),
+					onBlur: guardEmpty ? (e) => { if (trim(e.target.value)) return cp.onBlur(e); } : cp.onBlur,
+				};
+			};
 
 			if (props.part === "persona") {
+				const st = mem && mem.stats;
+				const bp = (st && st.byPlatform) || null;
+				const tags = st ? [
+					["对话", st.episodes], ["世界设定", st.lore], ["主人事实", st.facts],
+					["上网", bp ? (bp.web || 0) : null], ["QQ", bp ? (bp.qq || 0) : null],
+					["抖音", bp ? (bp.douyin || 0) : null], ["B站", bp ? (bp.bilibili || 0) : null],
+				].filter((p) => p[1] !== null && p[1] !== undefined) : [];
 				return h(react.Fragment, null,
 					// 角色设定
 					h(Card, {
 						title: "角色设定",
 						extra: h("button", { className: "fy-btn primary", disabled: busy === "persona", onClick: savePersona },
 							busy === "persona" ? "保存中…" : "保存角色设定"),
-						hint: "这是她「自我迭代」的底稿：她每次醒来都读这份设定，你改她就照新的活。",
 					},
 						h("textarea", {
 							className: "fy-input",
@@ -1084,16 +1104,13 @@ textarea.fy-input{width:100%;min-height:136px;resize:vertical;line-height:1.65;f
 					h(Card, {
 						title: "记忆库",
 						extra: h("div", { className: "fy-row", style: { margin: 0 } },
-							h("span", { className: "fy-hint", style: { marginTop: 0 } },
-								mem && mem.stats
-									? "对话 " + mem.stats.episodes + " · 世界设定 " + mem.stats.lore + " · 主人事实 " + mem.stats.facts
-									+ (mem.stats.byPlatform ? " · 上网 " + (mem.stats.byPlatform.web || 0) + " · QQ " + (mem.stats.byPlatform.qq || 0) + " · 抖音 " + (mem.stats.byPlatform.douyin || 0) + " · B站 " + (mem.stats.byPlatform.bilibili || 0) : "")
-									: "还没读到"),
+							st
+								? tags.map((p) => h("span", { className: "fy-tag", key: p[0] }, p[0] + " " + p[1]))
+								: h("span", { className: "fy-tag" }, "还没读到"),
 							h("button", {
 								className: "fy-btn",
 								onClick: () => api("/memory").then(setMem).catch((e) => flash("读记忆失败：" + e.message, true)),
 							}, "刷新")),
-						hint: "最近的对话片段 —— 她记得的都在这里。",
 					},
 						h("div", { className: "fy-mem" },
 							mem && (mem.recent || []).length
@@ -1101,54 +1118,29 @@ textarea.fy-input{width:100%;min-height:136px;resize:vertical;line-height:1.65;f
 									h("b", null, e.role === "assistant" ? "她" : "对方"),
 									h("span", { className: "fy-tag" }, String(e.chatId || "").split(":")[0] || e.platform || "?"),
 									short(e.text, 96)))
-								: h("div", { className: "fy-mem-item" }, "还没有记忆 —— 她醒过之后会开始记"))));
+								: h("div", { className: "fy-mem-item" }, "还没有记忆"))));
 			}
 
 			return h(react.Fragment, null,
 				// 主人
-				h(Card, {
-					title: "主人",
-					hint: "QQ 号填上后，她能认出「这个人是我主人」；对网友保持距离、不泄隐私。",
-				},
-					h(Row, { label: "QQ 号" },
-						h("input", {
-							className: "fy-input fy-w-md", value: draft.ownerQQ, placeholder: "3082864371",
-							onChange: (e) => setDraft(Object.assign({}, draft, { ownerQQ: e.target.value })),
-							onBlur: () => save({ owner: { qq: draft.ownerQQ.trim() } }, "主人 QQ 已保存"),
-						})),
-					h(Row, { label: "称呼" },
-						h("input", {
-							className: "fy-input fy-w-md", value: draft.ownerName, placeholder: "她怎么叫你",
-							onChange: (e) => setDraft(Object.assign({}, draft, { ownerName: e.target.value })),
-							onBlur: () => save({ owner: { name: draft.ownerName.trim() } }, "称呼已保存"),
-						})),
-					h(Row, { label: "B站 mid" },
-						h("input", {
-							className: "fy-input fy-w-md", value: draft.ownerMid, placeholder: "B站数字 UID",
-							onChange: (e) => setDraft(Object.assign({}, draft, { ownerMid: e.target.value })),
-							onBlur: () => save({ owner: { mid: draft.ownerMid.trim() } }, "B站 mid 已保存"),
-						})),
-					h(Row, { label: "微信 wxid" },
-						h("input", {
-							className: "fy-input fy-w-md", value: draft.ownerWechat, placeholder: "（可选）",
-							onChange: (e) => setDraft(Object.assign({}, draft, { ownerWechat: e.target.value })),
-							onBlur: () => save({ owner: { wechat: draft.ownerWechat.trim() } }, "已保存"),
-						})),
-					h(Row, { label: "抖音昵称" },
-						h("input", {
-							className: "fy-input fy-w-md", value: draft.douyinOwner, placeholder: "（分享给主人的私信目标）",
-							onChange: (e) => setDraft(Object.assign({}, draft, { douyinOwner: e.target.value })),
-							onBlur: () => save({ douyin: { owner: { name: draft.douyinOwner.trim() } } }, "主人抖音昵称已保存"),
-						}))),
+				h(Card, { title: "主人" },
+					h(Field, { label: "QQ 号" },
+						h("input", textProps("ownerQQ", draft.ownerQQ, "owner.qq", "主人 QQ 已保存", "fy-input fy-w-md", "3082864371"))),
+					h(Field, { label: "称呼" },
+						h("input", textProps("ownerName", draft.ownerName, "owner.name", "称呼已保存", "fy-input fy-w-md", "她怎么叫你"))),
+					h(Field, { label: "B站 mid" },
+						h("input", textProps("ownerMid", draft.ownerMid, "owner.mid", "B站 mid 已保存", "fy-input fy-w-md", "B站数字 UID"))),
+					h(Field, { label: "微信 wxid" },
+						h("input", textProps("ownerWechat", draft.ownerWechat, "owner.wechat", "已保存", "fy-input fy-w-md", "（可选）"))),
+					h(Field, { label: "抖音昵称" },
+						h("input", textProps("douyinOwner", draft.douyinOwner, "douyin.owner.name", "主人抖音昵称已保存", "fy-input fy-w-md", "私信分享目标")))),
 
 				// 大脑（LLM）
-				h(Card, {
-					title: "大脑（LLM）",
-					hint: "所有平台（QQ/微信/抖音/B站/ESP32）共用这一个大脑。Key 只写入本机 feiyu.config.json，保存后不回显；环境变量 DEEPSEEK_API_KEY / LLM_API_KEY 优先于这里。改完下次对话生效。",
-				},
-					h(Row, { label: "API Key" },
+				h(Card, { title: "大脑（LLM）" },
+					h(Field, { label: "API Key" },
 						h("input", {
 							className: "fy-input fy-w-lg", type: "password", autoComplete: "off",
+							title: "环境变量 DEEPSEEK_API_KEY / LLM_API_KEY 优先",
 							value: draft.llmKey,
 							placeholder: (cfg.llm && cfg.llm.hasKey) ? "已配置，留空则保持不变" : "sk-…（未配置）",
 							onChange: (e) => setDraft(Object.assign({}, draft, { llmKey: e.target.value })),
@@ -1158,33 +1150,15 @@ textarea.fy-input{width:100%;min-height:136px;resize:vertical;line-height:1.65;f
 							className: "fy-btn primary", onClick: saveLlmKey,
 							disabled: !!busy || !String(draft.llmKey || "").trim(),
 						}, busy === "llmkey" ? "保存中…" : "保存 Key")),
-					h(Row, { label: "接口地址" },
-						h("input", {
-							className: "fy-input fy-w-lg", value: draft.llmBaseUrl, placeholder: "https://api.deepseek.com/v1",
-							onChange: (e) => setDraft(Object.assign({}, draft, { llmBaseUrl: e.target.value })),
-							onBlur: () => {
-								const v = draft.llmBaseUrl.trim();
-								if (v) save({ llm: { base_url: v } }, "接口地址已保存");
-							},
-						})),
-					h(Row, { label: "模型" },
-						h("input", {
-							className: "fy-input fy-w-lg", value: draft.llmModel, placeholder: "deepseek-chat",
-							onChange: (e) => setDraft(Object.assign({}, draft, { llmModel: e.target.value })),
-							onBlur: () => {
-								const v = draft.llmModel.trim();
-								if (v) save({ llm: { model: v } }, "模型已保存");
-							},
-						}))),
+					h(Field, { label: "接口地址" },
+						h("input", textProps("llmBaseUrl", draft.llmBaseUrl, "llm.base_url", "接口地址已保存", "fy-input fy-w-lg", "https://api.deepseek.com/v1", true))),
+					h(Field, { label: "模型" },
+						h("input", textProps("llmModel", draft.llmModel, "llm.model", "模型已保存", "fy-input fy-w-lg", "deepseek-chat", true)))),
 
-				// 音色
-				h(Card, {
-					title: "音色",
-					hint: voices.length
-						? "音色来自 D:/AI_Code/小智机器人/GPT-SoVITS/models/<名字>/（.wav 参考音频 + .txt 参考文本）；换完重启 DSH 完全生效。"
-						: "没扫到音色模型：把 GPT-SoVITS 音色放进 D:/AI_Code/小智机器人/GPT-SoVITS/models/<名字>/（含 .wav + .txt）。",
-				},
-					h(Row, { label: "当前音色" },
+				// 音色：语音 / 表情包 两个行组
+				h(Card, { title: "音色" },
+					h("div", { className: "fy-general-group" }, "语音"),
+					h(Field, { label: "当前音色" },
 						h("select", {
 							className: "fy-input",
 							value: draft.voicePath,
@@ -1199,27 +1173,18 @@ textarea.fy-input{width:100%;min-height:136px;resize:vertical;line-height:1.65;f
 						},
 							voices.length === 0 ? h("option", { value: "" }, "（没找到音色模型）") : null,
 							voices.map((v) => h("option", { key: v.ref_audio_path, value: v.ref_audio_path },
-								v.name + (v.has_prompt ? "" : "（缺参考文本）"))))),
-					h(Row, { label: "语音概率" },
-						h("input", {
-							className: "fy-input fy-w-sm", type: "number", min: 0, max: 1, step: 0.05,
-							value: draft.voiceChance,
-							onChange: (e) => setDraft(Object.assign({}, draft, { voiceChance: e.target.value })),
-							onBlur: () => save({ qq: { voice_chance: Math.max(0, Math.min(1, Number(draft.voiceChance) || 0)) } }, "语音概率已保存"),
-						}),
+								v.name + (v.has_prompt ? "" : "（缺参考文本）")))),
 						h("button", {
 							className: "fy-btn", disabled: busy === "voice",
 							onClick: testVoice,
-						}, busy === "voice" ? "合成中…" : "试听（发到 QQ）")),
-					h(Row, { label: "表情包概率" },
-						h("input", {
-							className: "fy-input fy-w-sm", type: "number", min: 0, max: 1, step: 0.05,
-							value: draft.stickerChance,
-							onChange: (e) => setDraft(Object.assign({}, draft, { stickerChance: e.target.value })),
-							onBlur: () => save({ qq: { stickerChance: Math.max(0, Math.min(1, Number(draft.stickerChance) || 0)) } }, "表情包概率已保存（摇中强制带一个，图生图管够）"),
-						}),
-						h("span", { className: "fy-hint", style: { marginTop: 0 } }, "0~1，回复带图片表情的概率（自制表情=图生图现场画）")),
-					h(Row, { label: "音色工坊" },
+						}, busy === "voice" ? "合成中…" : "试听")),
+					h(Field, { label: "语音概率", suffix: "0–1" },
+						h("input", Object.assign({
+							type: "number", min: 0, max: 1, step: 0.05,
+							value: draft.voiceChance,
+							onChange: (e) => setDraft(Object.assign({}, draft, { voiceChance: e.target.value })),
+						}, commitProps("qq.voice_chance", "语音概率已保存", { className: "fy-input fy-w-sm", parse: clamp01 })))),
+					h(Field, { label: "音色工坊" },
 						h("button", {
 							className: "fy-btn", disabled: busy === "voiceall",
 							onClick: async () => {
@@ -1230,7 +1195,7 @@ textarea.fy-input{width:100%;min-height:136px;resize:vertical;line-height:1.65;f
 								} catch (e) { flash("试听失败：" + ((e && e.message) || e), true); }
 								finally { setBusy(""); }
 							},
-						}, busy === "voiceall" ? "试听中…" : "全部音色试听"),
+						}, busy === "voiceall" ? "试听中…" : "全部试听"),
 						h("button", {
 							className: "fy-btn", disabled: busy === "sing",
 							onClick: async () => {
@@ -1241,11 +1206,17 @@ textarea.fy-input{width:100%;min-height:136px;resize:vertical;line-height:1.65;f
 								} catch (e) { flash("唱歌失败：" + ((e && e.message) || e), true); }
 								finally { setBusy(""); }
 							},
-						}, busy === "sing" ? "唱着呢…" : "让她唱一首"),
-						h("span", { className: "fy-hint", style: { marginTop: 0 } }, "新音色：voice import --url … --name … --text … 导入后试听切换")),
-					h("div", { className: "fy-hint" }, "0~1，QQ/微信 每条回复走语音的概率（0.5 = 一半）。"),
-					h(Row, { label: "AI表情包" },
-						h(Switch, {
+						}, busy === "sing" ? "唱着呢…" : "唱一首")),
+
+					h("div", { className: "fy-general-group" }, "表情包"),
+					h(Field, { label: "表情包概率", suffix: "0–1" },
+						h("input", Object.assign({
+							type: "number", min: 0, max: 1, step: 0.05,
+							value: draft.stickerChance,
+							onChange: (e) => setDraft(Object.assign({}, draft, { stickerChance: e.target.value })),
+						}, commitProps("qq.stickerChance", "表情包概率已保存", { className: "fy-input fy-w-sm", parse: clamp01 })))),
+					h(Field, { label: "AI 表情包" },
+						h(Toggle, {
 							on: draft.aiSticker,
 							label: "aiSticker",
 							onChange: (v) => {
@@ -1253,8 +1224,7 @@ textarea.fy-input{width:100%;min-height:136px;resize:vertical;line-height:1.65;f
 								save({ imageGen: Object.assign({ enabled: true, dailyMax: 30 }, cfg && cfg.imageGen, { enabled: v }) },
 									v ? "AI表情包已开：图库里没有的她会自己画一张入库补发" : "AI表情包已关（自制表情退回文字贴纸）");
 							},
-						}),
-						h("span", { className: "fy-hint", style: { marginTop: 0 } }, "图库没有的情绪 / 自制表情 → AI 画一张入库补发（QQ + B站图片评论共用，每天最多 30 张，走本机代理出网）"))));
+						}))));
 		}
 
 		// ===== QqCard =====
@@ -1334,53 +1304,48 @@ textarea.fy-input{width:100%;min-height:136px;resize:vertical;line-height:1.65;f
 		}
 
 		// ===== FreedomZone =====
-		// part: "schedule"（作息与限额，在「平台」分组）| "freedom"（完全自由 + 上网与进化，在「高级」分组）。
+		// part: "schedule"（作息，在「平台」分组）| "freedom"（完全自由 + 自由上网 / 自我升级 / 人格进化，整体放进红色 DangerZone）。
 		function FreedomZone(props) {
 			const { draft, setDraft, save, busy, setSvc, flash, commitNight, genReport, genReview, report } = props;
+			const { commitProps } = useSave({ save: save });
 
 			if (props.part === "schedule") {
-				// 作息与限额（B站和抖音共用的生物钟窗口）
-				return h(Card, {
-					title: "作息与限额",
-					hint: "窗口内随机挑时间醒（拟人，不整点）；B站和抖音共用这个窗口。",
-				},
-					h(Row, { label: "醒来窗口" },
+				// 作息（B站和抖音共用的生物钟窗口）
+				return h(Card, { title: "作息" },
+					h(Field, { label: "醒来窗口" },
 						h("input", {
 							className: "fy-input fy-w-sm", value: draft.nightStart, placeholder: "20:00",
 							onChange: (e) => setDraft(Object.assign({}, draft, { nightStart: e.target.value })),
 							onBlur: commitNight,
 						}),
-						h("span", { className: "fy-hint", style: { marginTop: 0 } }, "→"),
+						h("span", { className: "fy-suffix" }, "→"),
 						h("input", {
 							className: "fy-input fy-w-sm", value: draft.nightEnd, placeholder: "24:00",
 							onChange: (e) => setDraft(Object.assign({}, draft, { nightEnd: e.target.value })),
 							onBlur: commitNight,
-						}),
-						h("span", { className: "fy-label", style: { minWidth: "auto" } }, "次数"),
+						})),
+					h(Field, { label: "醒来次数", suffix: "次" },
 						h("input", {
 							className: "fy-input fy-w-sm", type: "number", min: 1, max: 5, value: draft.nightWakes,
 							onChange: (e) => setDraft(Object.assign({}, draft, { nightWakes: e.target.value })),
 							onBlur: commitNight,
 						})),
-					h(Row, { label: "观看日报" },
+					h(Field, { label: "观看日报" },
 						h("button", { className: "fy-btn", disabled: busy === "report", onClick: genReport },
-							busy === "report" ? "生成中…" : "生成今日日报"),
-						h("span", { className: "fy-hint", style: { marginTop: 0 } }, "聚合 B站/抖音 当天看过的，不调模型")),
-					h(Row, { label: "复盘学习日记" },
+							busy === "report" ? "生成中…" : "生成今日日报")),
+					h(Field, { label: "复盘日记" },
 						h("button", { className: "fy-btn", disabled: busy === "review", onClick: genReview },
-							busy === "review" ? "生成中…" : "写今日复盘"),
-						h("span", { className: "fy-hint", style: { marginTop: 0 } }, "LLM 提炼今天看过的，追加进私人日记")),
+							busy === "review" ? "生成中…" : "写今日复盘")),
 					report ? h("pre", { className: "fy-report" }, report) : null);
 			}
 
-			return h(react.Fragment, null,
-				// 完全自由（总开关）：她想干嘛就干嘛——上网/刷B站/刷抖音/做视频/写代码/玩/歇着，额度系统把关，微信不受影响
-				h(Card, {
-					title: "🔓 完全自由",
-					hint: "总开关。开了之后：自由上网进程 + B站自由刷自动拉起，DSH 会话按她自己的节奏被唤醒——想 produce 就 produce、想上网就上网、也能选择歇着。作品量/评论量/分享量照旧走额度；微信不受影响。重启 DSH 后开关自动复位。",
-				},
-					h(Row, { label: "完全自由" },
-						h(Switch, {
+			const openCount = [draft.freedomOn, draft.webRoam, draft.webSelfUp, draft.evoOn].filter(Boolean).length;
+			return h("section", { className: "fy-card" },
+				h(DangerZone, { title: "完全自由与进化", summary: "已开 " + openCount + " 项" },
+					// 完全自由（总开关）：自由上网进程 + B站自由刷自动拉起
+					h(Field, { label: "完全自由" },
+						h(Toggle, {
+							danger: true,
 							on: draft.freedomOn,
 							label: "freedomOn",
 							onChange: async (v) => {
@@ -1399,16 +1364,12 @@ textarea.fy-input{width:100%;min-height:136px;resize:vertical;line-height:1.65;f
 								flash(errs.length ? "服务操作有失败：" + errs.join("；")
 									: (v ? "已放她出去：自由上网+B站自由刷在跑，会话按她的意愿被唤醒" : "已收回：自由上网和 B站自由刷已停"), errs.length > 0);
 							},
-						}),
-						h("span", { className: "fy-hint", style: { marginTop: 0 } }, "唤醒间隔/概率在 feiyu.config.json 的 freedom（默认 75 分钟 · 55%）"))),
+						})),
 
-				// 上网与进化（给足自由度：她在网上瞎溜达/玩/学习/自我升级，全部有日志和备份）
-				h(Card, {
-					title: "🌐 上网与进化",
-					hint: "她可以全网瞎溜达（含内网）、玩、写小说写代码；自我升级强制走备份+测试+日志；人格进化每 N 天复盘更新她的人设。需要重启 DSH 生效。",
-				},
-					h(Row, { label: "自由上网" },
-						h(Switch, {
+					// 自由上网
+					h(Field, { label: "自由上网" },
+						h(Toggle, {
+							danger: true,
 							on: draft.webRoam,
 							label: "webRoam",
 							onChange: async (v) => {
@@ -1422,32 +1383,35 @@ textarea.fy-input{width:100%;min-height:136px;resize:vertical;line-height:1.65;f
 									} catch (e) { flash("自由上网服务操作失败：" + ((e && e.message) || e), true); }
 								}
 							},
-						}),
-						h("input", {
-							className: "fy-input fy-w-xs", type: "number", min: 1, max: 60, value: draft.webRestMin,
+						})),
+					h(Field, { label: "轮间休息", suffix: "分钟/轮" },
+						h("input", Object.assign({
+							type: "number", min: 1, max: 60, value: draft.webRestMin,
 							onChange: (e) => setDraft(Object.assign({}, draft, { webRestMin: e.target.value })),
-							onBlur: () => save({ web: { roam: { restMin: Math.max(1, Number(draft.webRestMin) || 2) } } }, "轮间休息已保存（分钟）"),
-						}),
-						h("span", { className: "fy-hint", style: { marginTop: 0 } }, "分钟/轮 · 她自己决定搜什么看什么玩什么，全记 web-log.md")),
-					h(Row, { label: "自我升级" },
-						h(Switch, {
+						}, commitProps("web.roam.restMin", "轮间休息已保存", { className: "fy-input fy-w-xs", parse: (v) => Math.max(1, Number(v) || 2) })))),
+
+					// 自我升级
+					h(Field, { label: "自我升级" },
+						h(Toggle, {
+							danger: true,
 							on: draft.webSelfUp,
 							label: "webSelfUp",
 							onChange: (v) => { setDraft(Object.assign({}, draft, { webSelfUp: v })); save({ web: { selfUpgrade: { enabled: v } } }, v ? "自我升级已开：改代码前强制备份，改完强制测试+日志" : "自我升级已关（只看只学不改）"); },
-						}),
-						h("span", { className: "fy-hint", style: { marginTop: 0 } }, "允许她改自己的代码（备份在 ~/.feiyu-ai/selfup-backups/）")),
-					h(Row, { label: "人格进化" },
-						h(Switch, {
+						})),
+
+					// 人格进化
+					h(Field, { label: "人格进化" },
+						h(Toggle, {
+							danger: true,
 							on: draft.evoOn,
 							label: "evoOn",
 							onChange: (v) => { setDraft(Object.assign({}, draft, { evoOn: v })); save({ personality: { evolve: { enabled: v } } }, v ? "人格进化已开：她定期复盘并更新自己的人设" : "人格进化已关"); },
-						}),
-						h("input", {
-							className: "fy-input fy-w-xs", type: "number", min: 1, max: 30, value: draft.evoDays,
+						})),
+					h(Field, { label: "进化间隔", suffix: "天/次" },
+						h("input", Object.assign({
+							type: "number", min: 1, max: 30, value: draft.evoDays,
 							onChange: (e) => setDraft(Object.assign({}, draft, { evoDays: e.target.value })),
-							onBlur: () => save({ personality: { evolve: { days: Math.max(1, Number(draft.evoDays) || 2) } } }, "进化间隔已保存（天）"),
-						}),
-						h("span", { className: "fy-hint", style: { marginTop: 0 } }, "天/次 · 更新 persona 自我迭代区"))));
+						}, commitProps("personality.evolve.days", "进化间隔已保存", { className: "fy-input fy-w-xs", parse: (v) => Math.max(1, Number(v) || 2) }))))));
 		}
 
 		// ===== DouyinCard =====
@@ -2088,6 +2052,12 @@ textarea.fy-input{width:100%;min-height:136px;resize:vertical;line-height:1.65;f
 					save: save, flash: flash, saveLlmKey: saveLlmKey, testVoice: testVoice,
 				}),
 
+				// 角色设定 + 记忆库
+				h(GeneralCards, {
+					part: "persona", persona: persona, setPersona: setPersona, savePersona: savePersona,
+					busy: busy, mem: mem, setMem: setMem, flash: flash,
+				}),
+
 				),
 
 				h(Group, { title: "平台", defaultOpen: true },
@@ -2098,7 +2068,7 @@ textarea.fy-input{width:100%;min-height:136px;resize:vertical;line-height:1.65;f
 				// 微信
 				h(WechatCard, { draft: draft, setDraft: setDraft, save: save }),
 
-				// 作息与限额（B站和抖音共用的生物钟窗口）
+				// 作息（B站和抖音共用的生物钟窗口）
 				h(FreedomZone, {
 					part: "schedule", draft: draft, setDraft: setDraft, busy: busy, commitNight: commitNight,
 					genReport: genReport, genReview: genReview, report: report,
@@ -2122,12 +2092,6 @@ textarea.fy-input{width:100%;min-height:136px;resize:vertical;line-height:1.65;f
 				// 完全自由 + 上网与进化
 				h(FreedomZone, {
 					part: "freedom", draft: draft, setDraft: setDraft, save: save, setSvc: setSvc, flash: flash,
-				}),
-
-				// 角色设定 + 记忆库
-				h(GeneralCards, {
-					part: "persona", persona: persona, setPersona: setPersona, savePersona: savePersona,
-					busy: busy, mem: mem, setMem: setMem, flash: flash,
 				}),
 
 				),
