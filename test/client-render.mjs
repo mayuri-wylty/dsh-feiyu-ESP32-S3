@@ -184,26 +184,76 @@ const allText = (node) => {
 
 assert.ok(!dump.includes('载入失败'), '不该走到错误态：' + allText(tree).slice(0, 200))
 const text = allText(tree)
-for (const must of ['大肥鱼', '运行状态', '平台开关', '主人', '音色', '微信', '作息', '角色设定', '记忆库']) {
+for (const must of ['大肥鱼', '演练', '真发', '体检', '主人', '音色', '微信', '作息', '角色设定', '记忆库']) {
   assert.ok(text.includes(must), '缺少区块：' + must)
 }
-for (const must of ['3082864371', 'sunshine_girl', '20:00', '在的，主人。', '运行中']) {
+for (const must of ['3082864371', 'sunshine_girl', '20:00', '在的，主人。', '生物钟 运行中']) {
   assert.ok(text.includes(must), '缺少数据：' + must)
 }
-// 四个平台开关（在 .fy-grid 里），另外微信卡片还有一个「自己判断该不该接」的开关
+// T7：旧的「运行状态 / 平台开关 / 连接中心」三张卡与 基础/平台/高级 分组已删除
+for (const gone of ['运行状态', '平台开关', '连接中心', '跑一次体检', '干跑（总闸）']) {
+  assert.ok(!text.includes(gone), 'T7 后不应再有：' + gone)
+}
 const collect = (node, predicate, acc = []) => {
   if (!node || typeof node !== 'object') return acc
   if (node.props && predicate(node)) acc.push(node)
   for (const k of node.children || []) collect(k, predicate, acc)
   return acc
 }
-const platforms = collect(tree, (n) => n.props.className === 'fy-grid')
-assert.equal(platforms.length, 1, '平台开关网格应该只有一个')
-const switches = collect(platforms[0], (n) => String(n.props.className || '').includes('fy-switch'))
-assert.equal(switches.length, 4, '平台开关数量应为 4，实际 ' + switches.length)
-assert.equal(switches.filter((n) => n.props.className.includes('on')).length, 3, '默认应有 3 个平台开启')
+const hasCls = (n, c) => String((n.props && n.props.className) || '').split(/\s+/).includes(c)
+const byCls = (root, c) => collect(root, (n) => hasCls(n, c))
+const byId = (root, id) => collect(root, (n) => n.props.id === id)[0]
+assert.equal(byCls(tree, 'fy-group').filter((n) => !hasCls(n, 'sub')).length, 0, '不应再有顶层折叠分组（基础/平台/高级）')
+assert.ok(!/fy-hint|fy-sw-desc|fy-sub|fy-grid/.test(dump), '整页不得出现灰字说明类 fy-hint / fy-sw-desc / fy-sub / 旧开关网格')
+
+// ── T7 布局：状态条 → 5 通道卡（B站、抖音、QQ、微信、小智ESP32）→ 通用区 → 自由度区 ──
+const CH_IDS = ['fy-ch-bili', 'fy-ch-douyin', 'fy-qq', 'fy-wechat', 'fy-esp32']
+const flatKids = (kids) => kids.flatMap((n) => (n && typeof n === 'object' ? (n.type === undefined ? flatKids(n.children || []) : [n]) : []))
+const panelKids = flatKids(tree.children || [])
+const kidIdx = (pred) => panelKids.findIndex(pred)
+const chans = byCls(tree, 'fy-channel')
+assert.deepEqual(chans.map((n) => n.props.id), CH_IDS, '通道卡顺序应为 B站、抖音、QQ、微信、小智ESP32')
+for (const c of chans) {
+  assert.ok(byCls(byCls(c, 'fy-card-head')[0], 'fy-card-title')[0].children.some((k) => k && k.props && /^fy-dot-(ok|warn|off|idle)$/.test(k.props.className)), c.props.id + ' 卡头应有 StatusDot')
+}
+const sbIdx = kidIdx((n) => hasCls(n, 'fy-statusbar'))
+const order = CH_IDS.map((id) => kidIdx((n) => n.props.id === id))
+assert.ok(sbIdx >= 0 && sbIdx < order[0], '状态条在通道卡之前（置顶）')
+assert.deepEqual(order, [...order].sort((a, b) => a - b), '通道卡按序排列')
+const idxOfTitle = (t) => kidIdx((n) => byCls(n, 'fy-card-title').some((x) => (x.children || []).includes(t)))
+const gen = ['主人', '大脑（LLM）', '音色', '角色设定', '记忆库'].map(idxOfTitle)
+assert.ok(gen.every((i) => i > order[4]), '通用区在通道卡之后：' + gen)
+assert.deepEqual(gen, [...gen].sort((a, b) => a - b), '通用区顺序：主人、大脑、音色、角色设定、记忆库')
+const zoneIdx = kidIdx((n) => byCls(n, 'fy-zone-head').some((x) => allText(x).includes('完全自由与进化')))
+const restIdx = idxOfTitle('作息')
+assert.ok(zoneIdx > gen[4] && restIdx > zoneIdx, '自由度区：完全自由与进化（DangerZone）在前，作息在后，都在通用区之后')
+const zone = byCls(tree, 'fy-zone').find((z) => allText(z).includes('完全自由与进化'))
+assert.equal(byCls(zone, 'fy-zone-head')[0].props['aria-expanded'], 'false', '完全自由与进化默认折叠')
+assert.ok(allText(byCls(zone, 'fy-zone-head')[0]).includes('完全自由与进化'))
+
+// 状态条：5 个通道点 + 演练|真发 Segmented + 体检
+const bar = byCls(tree, 'fy-statusbar')[0]
+const sbDots = byCls(bar, 'fy-sb-dot')
+assert.deepEqual(sbDots.map((n) => n.props['data-conn']), ['bilibili', 'douyin', 'qq', 'wechat', 'esp32'])
+assert.deepEqual(sbDots.map((n) => (n.children || []).filter((c) => typeof c === 'string').join('')), ['B站', '抖音', 'QQ', '微信', '小智ESP32'])
+assert.ok(sbDots.every((n) => byCls(n, 'fy-dot-off').length + byCls(n, 'fy-dot-ok').length + byCls(n, 'fy-dot-warn').length + byCls(n, 'fy-dot-idle').length === 1), '每个点一个 StatusDot')
+const seg = byCls(bar, 'fy-seg')[0]
+assert.deepEqual(byCls(seg, 'fy-seg-opt').map((n) => (n.children || []).join('')), ['演练', '真发'])
+assert.ok(hasCls(byCls(seg, 'fy-seg-opt')[1], 'danger'), '真发是 danger 选项')
+assert.ok(hasCls(byCls(seg, 'fy-seg-opt')[1], 'on') && !hasCls(byCls(seg, 'fy-seg-opt')[0], 'on'), 'status.dryRun=false → 真发选中')
+assert.ok(byCls(bar, 'fy-btn').some((n) => (n.children || []).join('') === '体检'), '状态条右端有「体检」')
+
+// 平台启用开关：在各自通道卡头（键 / 初始态同旧「平台开关」卡）；ESP32 卡头没有
+const headSwitch = (id) => byCls(byCls(byId(tree, id), 'fy-card-head')[0], 'fy-switch')
+for (const [id, label, on] of [['fy-ch-bili', 'B站', true], ['fy-ch-douyin', '抖音', true], ['fy-qq', 'QQ', true], ['fy-wechat', '微信', false]]) {
+  const sw = headSwitch(id)
+  assert.equal(sw.length, 1, label + ' 卡头应有 1 个平台启用开关')
+  assert.equal(sw[0].props['aria-label'], label)
+  assert.equal(hasCls(sw[0], 'on'), on, label + ' 初始态')
+}
+assert.equal(headSwitch('fy-esp32').length, 0, 'ESP32 卡头不加平台开关')
 const allSwitches = collect(tree, (n) => String(n.props.className || '').includes('fy-switch'))
-assert.equal(allSwitches.length, 31 + 8 + 1, '全页开关应为 40 个（31 + T4 的 8 个「不限」小开关 + T5 的 QQ 日上限「不限」）')
+assert.equal(allSwitches.length, 31 + 8 + 1 - 1, '全页开关 39 个（旧 40：31 + 8 个「不限」+ QQ 日上限「不限」；干跑开关换成 演练|真发 Segmented 少 1）')
 
 assert.ok(fetchCalls.includes('/dsh-feiyu/api/config'), '没有请求 /config')
 assert.ok(styleTags.length >= 1, '样式没注入')
@@ -340,7 +390,7 @@ effects.length = 0
 fetchCalls = []
 await rerender()
 const btnByText = (t) => collect2(tree, (n) => n.type === 'button' && (n.children || []).includes(t))[0]
-const titleDot = () => collect2(tree, (n) => n.props.className === 'fy-card-title' && (n.children || []).some((c) => c && c.props && /^fy-dot-/.test(c.props.className || '')))
+const titleDot = () => collect2(collect2(tree, (n) => n.props.id === 'fy-esp32')[0], (n) => n.props.className === 'fy-card-title' && (n.children || []).some((c) => c && c.props && /^fy-dot-/.test(c.props.className || '')))
   .map((n) => n.children.find((c) => c.props && /^fy-dot-/.test(c.props.className || '')).props.className)[0]
 const chkItems = () => collect2(tree, (n) => n.props['data-chk'])
 assert.equal(titleDot(), 'fy-dot-ok', '运行中 + Token + ASR 可用 → 卡头状态点为 ok')
@@ -395,7 +445,7 @@ assert.deepEqual(JSON.parse(fetchPosts[0].body), { esp32: { allowDevices: ['aa:b
 const joinedBtn = collect2(tree, (n) => String(n.props.className || '').includes('fy-esp32-join'))[0]
 assert.ok(joinedBtn.props.className.includes('added') && joinedBtn.props.disabled, '已在白名单的设备显示已加入态')
 
-// ── 连接中心（T4）：以 test/fixtures/connections.json 四种状态为准 ─────────────
+// ── 连接状态（T4 → T7 迁入各通道卡）：以 test/fixtures/connections.json 四种状态为准 ─────────────
 const fs = await import('node:fs')
 const FX = JSON.parse(fs.readFileSync(path.join(root, 'test/fixtures/connections.json'), 'utf8'))
 const CT = mod.__test
@@ -412,12 +462,28 @@ const renderConn = async (fx) => {
 }
 const btnsOf = (t) => collect(t, (n) => n.type === 'button').map((n) => (n.children || []).join(''))
 const ckInputs = (t) => inputsOf(t).filter((n) => ['SESSDATA', 'bili_jct', 'buvid3'].includes(n.props.placeholder))
+const cardText = (t, id) => allText(byId(t, id))
+const cardBtns = (t, id) => collect(byId(t, id), (n) => n.type === 'button').map((n) => (n.children || []).join(''))
+const headBtns = (t, id) => collect(byCls(byId(t, id), 'fy-card-head')[0], (n) => n.type === 'button' && !hasCls(n, 'fy-switch')).map((n) => (n.children || []).join(''))
+const textBtn = (t, id, label) => collect(byId(t, id), (n) => n.type === 'button' && (n.children || []).join('') === label)[0]
 
 // loggedOut：全部「未检测/未登录」，有二维码图，有扫码登录按钮
 let ct = await renderConn(FX.loggedOut)
 let ctext = allText(ct)
-for (const must of ['连接中心', '未检测（还没填 cookie）', '网关未启动', '未运行', '重新检测', '扫码登录', '刷新二维码', '保存 cookie']) {
-  assert.ok(ctext.includes(must), '连接中心(loggedOut)缺少：' + must)
+for (const must of ['未检测（还没填 cookie）', '网关未启动', '未运行', '重新检测', '扫码登录', '刷新二维码', '保存 cookie']) {
+  assert.ok(ctext.includes(must), '连接状态(loggedOut)缺少：' + must)
+}
+// 各内容落在对应通道卡内
+assert.ok(cardText(ct, 'fy-ch-bili').includes('未检测（还没填 cookie）') && cardBtns(ct, 'fy-ch-bili').includes('保存 cookie') && headBtns(ct, 'fy-ch-bili').includes('Cookie 登录'), 'B站卡：状态摘要 + cookie 表单 + 头部「Cookie 登录」')
+assert.ok(cardText(ct, 'fy-ch-douyin').includes('未登录') && headBtns(ct, 'fy-ch-douyin').includes('扫码登录'), '抖音卡：状态 + 头部「扫码登录」')
+assert.ok(cardText(ct, 'fy-qq').includes('网关未启动') && cardBtns(ct, 'fy-qq').includes('刷新二维码'), 'QQ 卡：状态 + 刷新二维码')
+assert.ok(cardText(ct, 'fy-wechat').includes('未运行') && !cardBtns(ct, 'fy-wechat').includes('重新检测'), '微信卡：摘要，无重新检测')
+assert.equal(collect(byId(ct, 'fy-qq'), (n) => n.type === 'img' && n.props.src === 'data:image/png;base64,AAAA').length, 1, '二维码 <img> 在 QQ 卡内（不是浮层）')
+assert.ok(hasCls(byCls(byId(ct, 'fy-ch-bili'), 'fy-conn-ck')[0], 'fy-row') && byCls(byId(ct, 'fy-ch-bili'), 'fy-conn-ck')[0].props.style.display === 'none', 'cookie 表单默认收起（仍挂在树里）')
+// 状态条的点来自 deriveConnections：unknown → 灰点(idle)，off → 红点，没有绿/黄
+{
+  const dots = byCls(byCls(ct, 'fy-statusbar')[0], 'fy-sb-dot').map((n) => (n.children[0].props.className))
+  assert.deepEqual(dots, ['fy-dot-idle', 'fy-dot-off', 'fy-dot-off', 'fy-dot-off', 'fy-dot-idle'])
 }
 assert.ok(fetchCalls.includes('/dsh-feiyu/api/connections'), '面板打开应拉一次 /connections')
 assert.ok(!fetchCalls.some((u) => u.includes('/connections/check')), '打开面板不得自动触发 check')
@@ -432,16 +498,23 @@ await rerender()
 ckInputs(tree)[1].props.onChange({ target: { value: 'jct-SECRET' } })
 await rerender()
 assert.ok(!JSON.stringify(tree).includes('SECRET') || ckInputs(tree).every((n) => n.props.type === 'password'), 'cookie 仅存在于 password 输入')
-const saveCk = collect(tree, (n) => n.type === 'button').find((n) => (n.children || []).includes('保存 cookie'))
+const ckOpenBtn = textBtn(tree, 'fy-ch-bili', 'Cookie 登录')
+await ckOpenBtn.props.onClick()
+await rerender()
+assert.equal(byCls(byId(tree, 'fy-ch-bili'), 'fy-conn-ck')[0].props.style.display, 'flex', '点「Cookie 登录」展开表单')
+assert.ok(textBtn(tree, 'fy-ch-bili', '收起 Cookie'), '展开后头部按钮变「收起 Cookie」')
+const saveCk = textBtn(tree, 'fy-ch-bili', '保存 cookie')
 await saveCk.props.onClick()
 await rerender()
 const ckPost = fetchPosts.find((p) => p.url === '/dsh-feiyu/api/cookie')
 assert.ok(ckPost && JSON.parse(ckPost.body).sessdata === 'sess-SECRET', '应 POST /cookie')
 assert.ok(ckInputs(tree).every((n) => n.props.value === ''), '提交后 cookie 输入应清空')
+assert.equal(byCls(byId(tree, 'fy-ch-bili'), 'fy-conn-ck')[0].props.style.display, 'none', '保存成功后表单收起')
+assert.ok(allText(tree).includes('B站 cookie 已保存'), '保存成功提示')
 assert.ok(!JSON.stringify(tree).includes('SECRET'), 'cookie 不得留在渲染树')
 
 // 重新检测：POST /connections/check {target}
-const recheckQq = collect(tree, (n) => n.type === 'button' && (n.children || []).includes('重新检测'))[2]
+const recheckQq = textBtn(tree, 'fy-qq', '重新检测')
 await recheckQq.props.onClick()
 assert.deepEqual(JSON.parse(fetchPosts.find((p) => p.url.endsWith('/connections/check')).body), { target: 'qq' })
 
@@ -449,22 +522,41 @@ assert.deepEqual(JSON.parse(fetchPosts.find((p) => p.url.endsWith('/connections/
 ct = await renderConn(FX.loggedIn)
 ctext = allText(ct)
 for (const must of ['已登录：测试用户（123456）', '已登录：抖音测试', '已登录：机器人（10001）', '运行中']) {
-  assert.ok(ctext.includes(must), '连接中心(loggedIn)缺少：' + must)
+  assert.ok(ctext.includes(must), '连接状态(loggedIn)缺少：' + must)
 }
+assert.ok(cardText(ct, 'fy-ch-bili').includes('已登录：测试用户（123456）'), 'B站摘要在 B站卡')
+assert.ok(cardText(ct, 'fy-ch-douyin').includes('已登录：抖音测试'), '抖音摘要在抖音卡')
+assert.ok(cardText(ct, 'fy-qq').includes('已登录：机器人（10001）'), 'QQ 摘要在 QQ 卡')
+assert.ok(cardText(ct, 'fy-wechat').includes('运行中'), '微信摘要在微信卡')
 assert.equal(collect(ct, (n) => n.type === 'img').length, 0, '无二维码时不渲染 img')
+{
+  const dots = byCls(byCls(ct, 'fy-statusbar')[0], 'fy-sb-dot').map((n) => (n.children[0].props.className))
+  assert.deepEqual(dots.slice(0, 4), ['fy-dot-ok', 'fy-dot-ok', 'fy-dot-ok', 'fy-dot-ok'], 'loggedIn：前 4 个通道点为绿')
+  const cardDots = ['fy-ch-bili', 'fy-ch-douyin', 'fy-qq', 'fy-wechat'].map((id) => byCls(byId(ct, id), 'fy-card-title')[0].children.find((k) => k && k.props && /^fy-dot-/.test(k.props.className)).props.className)
+  assert.deepEqual(cardDots, ['fy-dot-ok', 'fy-dot-ok', 'fy-dot-ok', 'fy-dot-ok'], '卡头状态点同样来自 deriveConnections')
+}
 
 // probeFailed：错误原因可见，二维码过期提示
 ct = await renderConn(FX.probeFailed)
 ctext = allText(ct)
 for (const must of ['nav: -101 账号未登录', 'self-info 超时', '二维码已过期', '登录失败：Chrome 未能启动', 'get_login_info 超时']) {
-  assert.ok(ctext.includes(must), '连接中心(probeFailed)缺少：' + must)
+  assert.ok(ctext.includes(must), '连接状态(probeFailed)缺少：' + must)
 }
+assert.ok(cardText(ct, 'fy-qq').includes('二维码已过期'), '二维码过期提示在 QQ 卡')
+assert.ok(cardText(ct, 'fy-ch-douyin').includes('登录失败：Chrome 未能启动'), '抖音登录失败提示在抖音卡')
+assert.ok(cardText(ct, 'fy-ch-bili').includes('nav: -101 账号未登录'), 'B站失败原因在 B站卡')
 
 // douyinWaiting：等待提示 + 取消按钮
 ct = await renderConn(FX.douyinWaiting)
 ctext = allText(ct)
 assert.ok(ctext.includes('请在弹出的 Chrome 里扫码，剩余 150 秒'), '应显示扫码倒计时')
 assert.ok(btnsOf(ct).includes('取消') && !btnsOf(ct).includes('扫码登录'), '等待中应显示取消而非扫码登录')
+assert.ok(cardText(ct, 'fy-ch-douyin').includes('请在弹出的 Chrome 里扫码，剩余 150 秒'), '扫码倒计时在抖音卡内')
+assert.deepEqual(headBtns(ct, 'fy-ch-douyin'), ['取消'], '抖音卡头动作 = 取消')
+{
+  const dotOf = (id) => byCls(byId(ct, id), 'fy-card-title')[0].children.find((k) => k && k.props && /^fy-dot-/.test(k.props.className)).props.className
+  assert.equal(dotOf('fy-ch-douyin'), 'fy-dot-warn', '等待扫码 → 抖音点为黄')
+}
 
 // 后端未提供（404）→ 降级提示，不崩
 delete RESPONSES['/dsh-feiyu/api/connections']
@@ -472,7 +564,8 @@ state.length = 0
 effects.length = 0
 await rerender()
 assert.ok(allText(tree).includes('后端未提供，请重启 DSH'), '404 应降级提示')
-assert.ok(!JSON.stringify(tree).includes('载入失败'), '连接中心 404 不得拖垮整页')
+assert.ok(!JSON.stringify(tree).includes('载入失败'), '连接状态 404 不得拖垮整页')
+assert.equal(byCls(byCls(tree, 'fy-statusbar')[0], 'fy-sb-dot').length, 5, '404 时状态条仍有 5 个点')
 
 // deriveConnections 纯函数
 const dv = CT.deriveConnections(FX.loggedOut)
@@ -509,24 +602,91 @@ assert.equal(CT.deriveConnections(null).length, 5, '空输入不抛错')
   assert.equal(states.length, before, '卸载后不得再回调')
 }
 
-// ── T5：分组折叠 + 主动搭话迁移 + 状态 chip 读 /connections ────────────────────
+// ── T7：状态条交互 / 平台启用开关迁入卡头 / 卡头动作 ──────────────────────────────
 {
   const gt = await renderConn(FX.loggedIn)
-  const groups = collect(gt, (n) => n.props.className === 'fy-group')
-  const heads = collect(gt, (n) => n.type === 'button' && String(n.props.className || '') === 'fy-group-head').map((n) => (n.children || []).join(''))
-  assert.ok(heads.some((x) => x.includes('基础') && x.startsWith('▾')), '基础默认展开')
-  assert.ok(heads.some((x) => x.includes('平台') && x.startsWith('▾')), '平台默认展开')
-  assert.ok(heads.some((x) => x.includes('高级') && x.startsWith('▸')), '高级默认折叠')
-  assert.equal(collect(gt, (n) => String(n.props.className || '').includes('fy-switch')).length, 31 + 8 + 1, '折叠不影响开关总数（31 + T4 的 8 个「不限」+ T5 的 1 个「不限」）')
-  assert.ok(allText(groups.find((g) => (g.children[0].children || []).join('') === '▾ 平台')).includes('主动搭话'), '主动搭话应在平台组')
-  assert.ok(!allText(groups.find((g) => allText(g).includes('当前音色'))).includes('主动搭话') || allText(groups.find((g) => allText(g).includes('当前音色'))).indexOf('QQ 主动搭话') === -1, '主动搭话不应在音色卡')
+  assert.equal(collect(gt, (n) => String(n.props.className || '').includes('fy-switch')).length, 39, '开关总数不受重排影响（39）')
+  assert.ok(allText(byId(gt, 'fy-ch-bili')).includes('主动搭话') === false && allText(byId(gt, 'fy-qq')).includes('主动搭话'), '主动搭话在 QQ 卡')
   assert.ok(!allText(gt).includes('NapCat\\cache'), '不再写死二维码路径')
+
+  // 点击状态条的点 → scrollIntoView 到对应卡 id
+  const scrolled = []
+  const origGet = document.getElementById
+  document.getElementById = (id) => ({ scrollIntoView: (o) => scrolled.push([id, o && o.behavior]) })
+  for (const d of byCls(byCls(gt, 'fy-statusbar')[0], 'fy-sb-dot')) d.props.onClick()
+  document.getElementById = origGet
+  assert.deepEqual(scrolled.map((x) => x[0]), CH_IDS, '5 个点依次滚到 5 张通道卡')
+
+  // 演练|真发：与旧总闸同一条保存路径 { guard: { dryRun } }，toast 文案不变，成功后状态条跟随
+  const segOpt = (label) => byCls(byCls(tree, 'fy-statusbar')[0], 'fy-seg-opt').find((n) => (n.children || []).join('') === label)
+  fetchPosts.length = 0
+  await segOpt('演练').props.onClick()
+  await rerender()
+  const dryPost = fetchPosts.find((p) => p.url === '/dsh-feiyu/api/config' && String(p.body).includes('dryRun'))
+  assert.deepEqual(JSON.parse(dryPost.body), { guard: { dryRun: true } })
+  assert.ok(allText(tree).includes('已切干跑：所有对外动作只演练不发送'), '切演练 toast')
+  assert.ok(hasCls(segOpt('演练'), 'on') && !hasCls(segOpt('真发'), 'on'), '保存成功后「演练」选中')
+  fetchPosts.length = 0
+  await segOpt('真发').props.onClick()
+  await rerender()
+  assert.deepEqual(JSON.parse(fetchPosts.find((p) => p.url === '/dsh-feiyu/api/config' && String(p.body).includes('dryRun')).body), { guard: { dryRun: false } }, '点「真发」POST 同一条保存路径')
+  assert.ok(allText(tree).includes('已切真发：弹幕/动态/点赞/评论/群聊/说说/音频都会真的发出去'), '切真发 toast')
+  assert.ok(hasCls(segOpt('真发'), 'on'))
+
+  // 平台启用开关（卡头）：同旧开关的保存 + 重启语义
+  fetchPosts.length = 0
+  await headSwitch('fy-wechat')[0].props.onClick()
+  await rerender()
+  const platPost = fetchPosts.find((p) => p.url === '/dsh-feiyu/api/config' && String(p.body).includes('platforms'))
+  assert.deepEqual(JSON.parse(platPost.body), { platforms: { bilibili: true, qq: true, wechat: true, douyin: true } }, '微信开关 POST platforms 整段')
+  assert.deepEqual(JSON.parse(fetchPosts.find((p) => p.url === '/dsh-feiyu/api/services').body), { target: 'wechat', action: 'start' }, '微信开 → 启动服务')
+  assert.ok(allText(tree).includes('已开启：微信') || fetchPosts.length >= 2, '开启 toast')
+  fetchPosts.length = 0
+  await headSwitch('fy-ch-bili')[0].props.onClick()
+  await rerender()
+  assert.ok(fetchPosts.some((p) => p.url === '/dsh-feiyu/api/config' && String(p.body).includes('"bilibili":false')), 'B站开关写 platforms.bilibili=false')
+  assert.ok(!fetchPosts.some((p) => p.url === '/dsh-feiyu/api/services'), 'B站/抖音开关不重启服务')
+
+  // 卡头动作：QQ 网关 / 重启 QQ / 重启微信（走 /services）
+  assert.deepEqual(headBtns(tree, 'fy-qq'), ['安装并启动 QQ 网关', '重启 QQ'], 'QQ 头：网关不通 → 安装并启动 + 重启')
+  assert.deepEqual(headBtns(tree, 'fy-wechat'), ['重启微信'])
+  fetchPosts.length = 0
+  await textBtn(tree, 'fy-wechat', '重启微信').props.onClick()
+  assert.deepEqual(JSON.parse(fetchPosts.find((p) => p.url === '/dsh-feiyu/api/services').body), { target: 'wechat', action: 'restart' })
+  fetchPosts.length = 0
+  await textBtn(tree, 'fy-qq', '重启 QQ').props.onClick()
+  assert.deepEqual(JSON.parse(fetchPosts.find((p) => p.url === '/dsh-feiyu/api/services').body), { target: 'qq', action: 'restart' })
+  fetchPosts.length = 0
+  await textBtn(tree, 'fy-qq', '安装并启动 QQ 网关').props.onClick()
+  assert.deepEqual(JSON.parse(fetchPosts.find((p) => p.url === '/dsh-feiyu/api/services').body), { target: 'napcat', action: 'install' })
+  fetchPosts.length = 0
+  await textBtn(tree, 'fy-ch-douyin', '扫码登录').props.onClick()
+  assert.deepEqual(JSON.parse(fetchPosts.find((p) => p.url === '/dsh-feiyu/api/douyin/login').body), { action: 'start' })
+
+  // 体检：POST /selftest，明细（fy-check）出现在状态条下方
+  RESPONSES['/dsh-feiyu/api/selftest'] = { ok: false, items: [{ name: '配置可读', ok: true }, { name: 'LLM Key', ok: false, detail: '未配置' }] }
+  const origPost = globalThis.fetch
+  globalThis.fetch = async (url, init) => {
+    if (init && init.method === 'POST' && url === '/dsh-feiyu/api/selftest') { fetchPosts.push({ url, body: init.body }); return { ok: true, status: 200, text: async () => JSON.stringify(RESPONSES[url]) } }
+    return origPost(url, init)
+  }
+  fetchPosts.length = 0
+  await byCls(byCls(tree, 'fy-statusbar')[0], 'fy-btn').find((n) => (n.children || []).join('') === '体检').props.onClick()
+  await rerender()
+  globalThis.fetch = origPost
+  assert.ok(fetchPosts.some((p) => p.url === '/dsh-feiyu/api/selftest'), '体检 POST /selftest')
+  const chk = byCls(tree, 'fy-check')[0]
+  assert.ok(chk, '体检结果区 fy-check 在状态条下')
+  assert.ok(allText(chk).includes('配置可读') && allText(chk).includes('LLM Key') && allText(chk).includes('未配置'), '体检明细')
+  { const ks = flatKids(tree.children || []); assert.equal(ks.findIndex((n) => hasCls(n, 'fy-check')), ks.findIndex((n) => hasCls(n, 'fy-statusbar')) + 1, 'fy-check 紧贴状态条') }
+
   delete RESPONSES['/dsh-feiyu/api/connections']
   state.length = 0
   effects.length = 0
   await rerender()
   const noConn = allText(tree)
   assert.ok(noConn.includes('未检测') && !noConn.includes('已接入'), '拿不到 /connections 时显示未检测')
+  assert.ok(!JSON.stringify(tree).includes('fy-hint'), '整页没有 fy-hint')
 }
 
-console.log('client-render ✓  渲染通过：9 个区块 · 4 个平台开关 · 大脑（LLM）卡片 · ESP32 卡片（正常态 + 空状态）· 连接中心（4 夹具 + 降级 + 登录状态机）· 请求', fetchCalls.length, '次')
+console.log('client-render ✓  渲染通过：状态条 + 5 通道卡（卡头平台开关/动作）· 通用区 · 自由度区 · 大脑（LLM）卡片 · ESP32 卡片（正常态 + 空状态）· 连接状态（4 夹具 + 降级 + 登录状态机）· 请求', fetchCalls.length, '次')

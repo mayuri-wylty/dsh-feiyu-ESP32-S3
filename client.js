@@ -62,10 +62,10 @@ window.__ModuleLoader__.load({
 		}
 
 		const PLATFORMS = [
-			["bilibili", "B站", "定时养鱼：看视频、写评论、@你"],
-			["qq", "QQ", "点开即启动：秒回 + 网关 + 语音（按需开，不随 DSH 自启）", "restart"],
-			["wechat", "微信", "点开即启动：替你回消息（按联系人分开记）", "restart"],
-			["douyin", "抖音", "定时刷视频 + 真发评论 + @人"],
+			["bilibili", "B站"],
+			["qq", "QQ", "restart"],
+			["wechat", "微信", "restart"],
+			["douyin", "抖音"],
 		];
 
 		// ── 少量工具 ──────────────────────────────────────────────────────────
@@ -93,7 +93,6 @@ window.__ModuleLoader__.load({
   background:var(--dsw-alias-bg-l2,color-mix(in srgb,currentColor 8%,transparent));
   border:1px solid var(--dsw-alias-border-l2,color-mix(in srgb,currentColor 14%,transparent))}
 .fy-h1{font-size:15px;font-weight:600;line-height:1.3}
-.fy-sub{font-size:12px;color:var(--dsw-alias-label-secondary,#8b95a5);margin-top:2px}
 .fy-card{border:1px solid var(--dsw-alias-border-l2,color-mix(in srgb,currentColor 14%,transparent));border-radius:12px;
   background:var(--dsw-alias-bg-l1,color-mix(in srgb,currentColor 3%,transparent));padding:14px 16px}
 .fy-card-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px}
@@ -121,13 +120,6 @@ textarea.fy-input{width:100%;min-height:136px;resize:vertical;line-height:1.65;f
 .fy-btn.primary{background:#3b6cf6;border-color:#3b6cf6;color:#fff;font-weight:600;box-shadow:0 1px 3px rgba(59,108,246,.28)}
 .fy-btn.primary:hover{background:#2f5be0;color:#fff;border-color:#2f5be0}
 
-.fy-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
-@media (max-width:460px){.fy-grid{grid-template-columns:1fr}}
-.fy-sw{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:9px 12px;border-radius:10px;
-  border:1px solid var(--dsw-alias-border-l2,color-mix(in srgb,currentColor 12%,transparent));
-  background:var(--dsw-alias-bg-l2,color-mix(in srgb,currentColor 4%,transparent))}
-.fy-sw-name{font-size:12.5px;font-weight:500}
-.fy-sw-desc{display:block;font-size:11px;color:var(--dsw-alias-label-tertiary,#98a2b3);margin-top:2px;line-height:1.4}
 .fy-switch{position:relative;flex:none;width:38px;height:22px;padding:0;border-radius:22px;cursor:pointer;
   border:1px solid var(--dsw-alias-border-l2,color-mix(in srgb,currentColor 18%,transparent));
   background:var(--dsw-alias-bg-l2,color-mix(in srgb,currentColor 10%,transparent));transition:background .16s,border-color .16s}
@@ -135,7 +127,6 @@ textarea.fy-input{width:100%;min-height:136px;resize:vertical;line-height:1.65;f
   background:var(--dsw-alias-label-tertiary,#9aa4b2);transition:left .16s,background .16s}
 .fy-switch.on{background:var(--dsw-alias-brand-primary,#3b6cf6);border-color:var(--dsw-alias-brand-primary,#3b6cf6)}
 .fy-switch.on i{left:18px;background:#fff}
-.fy-hint{font-size:11.5px;color:var(--dsw-alias-label-tertiary,#98a2b3);line-height:1.65;margin-top:8px}
 .fy-stats{display:flex;flex-wrap:wrap;gap:8px}
 .fy-chip{font-size:12px;padding:4px 10px;border-radius:999px;background:var(--dsw-alias-bg-l2,color-mix(in srgb,currentColor 6%,transparent));
   border:1px solid var(--dsw-alias-border-l2,color-mix(in srgb,currentColor 10%,transparent))}
@@ -145,12 +136,7 @@ textarea.fy-input{width:100%;min-height:136px;resize:vertical;line-height:1.65;f
 .fy-group-body{flex-direction:column;gap:14px}
 .fy-group.sub .fy-group-head{font-size:12px;font-weight:500;color:var(--dsw-alias-label-secondary,#8b95a5);margin-top:6px}
 .fy-group.sub .fy-group-body{gap:0}
-.fy-chip.ok{color:#2e9e5b}
-.fy-chip.warn{color:#c9883a}
 .fy-conn-qr{width:160px;height:160px;border-radius:8px;background:#fff;object-fit:contain}
-.fy-chip.bad{color:var(--dsw-alias-label-secondary,#8b95a5)}
-.fy-dot{display:inline-block;width:6px;height:6px;border-radius:50%;margin-right:6px;vertical-align:1px;background:#3fbf6f}
-.fy-dot.off{background:#c9564d}
 .fy-mem{max-height:232px;overflow:auto;margin-top:8px;font-size:12px;line-height:1.7}
 .fy-report{max-height:260px;overflow:auto;margin-top:8px;font-size:12px;line-height:1.7;
   background:var(--dsw-alias-bg-l2,color-mix(in srgb,currentColor 6%,transparent));
@@ -183,6 +169,7 @@ textarea.fy-input{width:100%;min-height:136px;resize:vertical;line-height:1.65;f
 .fy-dot-ok{background:#3fbf6f}
 .fy-dot-warn{background:#d9a13a}
 .fy-dot-off{background:#c9564d}
+.fy-dot-idle{display:inline-block;width:6px;height:6px;border-radius:50%;margin-right:6px;vertical-align:1px;background:var(--dsw-alias-label-tertiary,#9aa4b2);opacity:.5}
 .fy-suffix{font-size:12px;color:var(--dsw-alias-label-secondary,#8b95a5);white-space:nowrap}
 .fy-field{flex-wrap:nowrap}
 .fy-unl{display:inline-flex;align-items:center;gap:6px;margin-left:6px}
@@ -197,7 +184,7 @@ textarea.fy-input{width:100%;min-height:136px;resize:vertical;line-height:1.65;f
 .fy-seg-opt.danger.on{background:#c9564d;color:#fff}
 .fy-channel .fy-card-head{align-items:center;min-height:28px}
 .fy-channel .fy-card-title{display:flex;align-items:center}
-.fy-channel .fy-card-title .fy-dot-ok,.fy-channel .fy-card-title .fy-dot-warn,.fy-channel .fy-card-title .fy-dot-off{margin:0 0 0 8px}
+.fy-channel .fy-card-title .fy-dot-ok,.fy-channel .fy-card-title .fy-dot-warn,.fy-channel .fy-card-title .fy-dot-off,.fy-channel .fy-card-title .fy-dot-idle{margin:0 0 0 8px}
 .fy-zone{display:flex;flex-direction:column;gap:6px;border-left:3px solid #c9564d;padding-left:12px}
 .fy-zone-head{display:flex;align-items:center;gap:10px;align-self:flex-start;background:transparent;border:0;padding:2px 0;font:inherit;font-size:13px;font-weight:600;color:inherit;cursor:pointer}
 .fy-zone-summary{font-size:11.5px;font-weight:400;color:var(--dsw-alias-label-tertiary,#98a2b3)}
@@ -215,6 +202,20 @@ textarea.fy-input{width:100%;min-height:136px;resize:vertical;line-height:1.65;f
 .fy-esp32-kind{margin-top:12px;padding-top:8px;border-top:1px dashed var(--dsw-alias-border-l2,rgba(128,128,128,.25))}
 .fy-general-group{font-size:12px;font-weight:600;color:var(--dsw-alias-label-secondary,#8b95a5);margin:12px 0 2px}
 .fy-general-group:first-of-type{margin-top:0}
+/* ── T7：状态条 / 通道卡头 / 连接状态行 ── */
+.fy-statusbar{display:flex;align-items:center;gap:8px 14px;flex-wrap:wrap;padding:8px 12px;border-radius:12px;
+  border:1px solid var(--dsw-alias-border-l2,color-mix(in srgb,currentColor 14%,transparent));
+  background:var(--dsw-alias-bg-l1,color-mix(in srgb,currentColor 3%,transparent))}
+.fy-sb-dots{display:flex;align-items:center;flex-wrap:wrap;gap:2px 14px;min-width:0}
+.fy-sb-dot{display:inline-flex;align-items:center;background:transparent;border:0;padding:3px 0;font:inherit;font-size:12.5px;color:inherit;cursor:pointer;white-space:nowrap}
+.fy-sb-dot:hover{color:var(--dsw-alias-brand-primary,#3b6cf6)}
+.fy-sb-right{display:flex;align-items:center;gap:8px;margin-left:auto}
+.fy-card-act{display:flex;align-items:center;justify-content:flex-end;flex-wrap:wrap;gap:6px 8px}
+.fy-conn-sum{font-size:12.5px;flex:1 1 140px;min-width:0}
+.fy-field:has(.fy-conn-sum){flex-wrap:wrap}
+.fy-field .fy-btn,.fy-field .fy-tag{white-space:nowrap;flex:none}
+.fy-conn-cap{font-size:12px}
+.fy-esp32-sec{font-size:12px;font-weight:600;color:var(--dsw-alias-label-secondary,#8b95a5)}
 `;
 
 		function useStyles() {
@@ -236,29 +237,10 @@ textarea.fy-input{width:100%;min-height:136px;resize:vertical;line-height:1.65;f
 				h("div", { className: "fy-card-head" },
 					h("div", { className: "fy-card-title" }, props.title),
 					props.extra || null),
-				props.children,
-				props.hint ? h("div", { className: "fy-hint" }, props.hint) : null);
-		}
-
-		function Row(props) {
-			return h("div", { className: "fy-row" },
-				props.label ? h("span", { className: "fy-label" }, props.label) : null,
 				props.children);
 		}
 
-		function Switch(props) {
-			return h("button", {
-				type: "button",
-				className: "fy-switch" + (props.on ? " on" : ""),
-				role: "switch",
-				"aria-checked": props.on ? "true" : "false",
-				"aria-label": props.label || "",
-				disabled: props.disabled,
-				onClick: () => props.onChange(!props.on),
-			}, h("i"));
-		}
-
-		// 可折叠分组：内容始终挂在树里，仅 display 切换（开关/输入状态不受折叠影响）
+		// 可折叠分组（现仅用作通道卡内的 sub 子组）：内容始终挂在树里，仅 display 切换（开关/输入状态不受折叠影响）
 		function Group(props) {
 			const [open, setOpen] = useState(!!props.defaultOpen);
 			return h("div", { className: "fy-group" + (props.sub ? " sub" : "") },
@@ -345,20 +327,23 @@ textarea.fy-input{width:100%;min-height:136px;resize:vertical;line-height:1.65;f
 		}
 
 		// ===== StatusDot =====
-		// state: 'ok' | 'warn' | 'off'（其余按 off）
+		// state: 'ok' | 'warn' | 'off'（其余按 off）；'unknown' / 'idle' = 还没探测，灰点
 		function StatusDot(props) {
-			const s = props.state === "ok" || props.state === "warn" ? props.state : "off";
+			const s = props.state === "ok" || props.state === "warn" ? props.state
+				: (props.state === "unknown" || props.state === "idle") ? "idle" : "off";
 			return h("span", { className: "fy-dot-" + s });
 		}
 
 		// ===== ChannelCard =====
-		// 卡头 = 名称 + StatusDot + 主动作槽(action)；root 带 id 供状态条锚点滚动；无 hint/footer 槽
+		// 卡头 = 名称 + StatusDot ｜ 右侧：启用开关槽(toggle) + 主动作槽(action)；root 带 id 供状态条锚点滚动；无 hint/footer 槽
 		function ChannelCard(props) {
 			return h("section", { className: "fy-card fy-channel", id: props.id },
 				h("div", { className: "fy-card-head" },
 					h("div", { className: "fy-card-title" }, props.title,
 						props.state ? h(StatusDot, { state: props.state }) : null),
-					props.action || null),
+					props.toggle
+						? h("div", { className: "fy-card-act" }, props.toggle, props.action || null)
+						: (props.action || null)),
 				props.children);
 		}
 
@@ -544,7 +529,9 @@ textarea.fy-input{width:100%;min-height:136px;resize:vertical;line-height:1.65;f
 			};
 		}
 
-		function ConnectionCenter() {
+		// 连接状态 + 抖音扫码登录流程 + B站 cookie 表单：状态由 FeiyuSection 持有（原 ConnectionCenter 的 state/回调整体上提，逻辑未改），
+		// 以 cx 传给通道卡头/卡体（ConnTop / ChannelAction）与状态条。
+		function useConnections() {
 			const [raw, setRaw] = useState(null);
 			const [unavailable, setUnavailable] = useState(false);
 			const [err, setErr] = useState("");
@@ -552,6 +539,7 @@ textarea.fy-input{width:100%;min-height:136px;resize:vertical;line-height:1.65;f
 			const [qr, setQr] = useState(null);
 			const [login, setLogin] = useState(null);
 			const [ck, setCk] = useState({ sessdata: "", bili_jct: "", buvid3: "" });
+			const [ckOpen, setCkOpen] = useState(false);
 			const [msg, setMsg] = useState(null);
 			const flowRef = useRef(null);
 			const alive = useRef(true);
@@ -609,55 +597,99 @@ textarea.fy-input{width:100%;min-height:136px;resize:vertical;line-height:1.65;f
 					await api(CONN_API.cookie, { method: "POST", body: JSON.stringify({ sessdata: ck.sessdata.trim(), bili_jct: ck.bili_jct.trim(), buvid3: ck.buvid3.trim() }) });
 					if (!alive.current) return;
 					setCk({ sessdata: "", bili_jct: "", buvid3: "" });
+					setCkOpen(false);
 					setMsg({ text: "B站 cookie 已保存" });
 					await load();
 				} catch (e) { if (alive.current) setMsg({ err: true, text: "保存失败：" + ((e && e.message) || e) }); }
 				finally { if (alive.current) setBusy(""); }
 			};
 
-			const rows = deriveConnections(raw || {});
-			const by = {};
-			rows.forEach((x) => { by[x.id] = x; });
-			const chip = (id) => h("div", { className: "fy-chip" + (by[id].state === "ok" ? " ok" : by[id].state === "warn" ? " warn" : " bad") },
-				h("b", null, by[id].summary));
-			const recheck = (t) => h("button", { className: "fy-btn", disabled: !!busy, onClick: () => check(t) },
-				busy === "check:" + t ? "检测中…" : "重新检测");
-			const ls = (login && login.state) || "idle";
-			const qq = (raw && raw.qq) || {};
-			const setField = (k) => (ev) => { const v = ev.target.value; setCk((c) => Object.assign({}, c, { [k]: v })); };
-			const pwd = (k, ph) => h("input", { className: "fy-input fy-w-md", type: "password", autoComplete: "off", placeholder: ph, value: ck[k], onChange: setField(k) });
+			return {
+				raw: raw, unavailable: unavailable, err: err, busy: busy, qr: qr, login: login, ck: ck, setCk: setCk,
+				ckOpen: ckOpen, setCkOpen: setCkOpen, msg: msg, flow: flowRef.current,
+				load: load, loadQr: loadQr, check: check, saveCookie: saveCookie,
+			};
+		}
 
-			if (unavailable) {
-				return h(Card, { title: "连接中心" }, h("div", { className: "fy-notice err" }, "后端未提供，请重启 DSH"));
+		// 单个通道的连接摘要行（deriveConnections 的一行）
+		const connRow = (cx, id) => deriveConnections((cx && cx.raw) || {}).find((x) => x.id === id);
+
+		// 通道卡卡头右侧主动作：B站 = Cookie 登录；抖音 = 扫码登录/取消；QQ = 网关安装/拉起 + 重启；微信 = 重启
+		function ChannelAction(props) {
+			const { id, cx, busy, status, startNapcat, restartService } = props;
+			if (id === "bilibili") {
+				return h("button", { className: "fy-btn", onClick: () => cx.setCkOpen(!cx.ckOpen) }, cx.ckOpen ? "收起 Cookie" : "Cookie 登录");
 			}
-			return h(Card, { title: "连接中心", extra: h("button", { className: "fy-btn", onClick: load, disabled: !!busy }, "刷新") },
-				err ? h("div", { className: "fy-notice err" }, "连接状态读取失败：" + err) : null,
-				msg ? h("div", { className: "fy-notice" + (msg.err ? " err" : "") }, msg.text) : null,
+			if (id === "douyin") {
+				const waiting = ((cx.login && cx.login.state) || "idle") === "waiting";
+				return waiting
+					? h("button", { className: "fy-btn", onClick: () => cx.flow.cancel() }, "取消")
+					: h("button", { className: "fy-btn primary", onClick: () => cx.flow.start() }, "扫码登录");
+			}
+			if (id === "qq") {
+				const napcatOk = !!(status && status.qqChannel && status.qqChannel.napcat && status.qqChannel.napcat.ok);   // 通道是否真的通：进程活着不等于能收发
+				const napcatQr = (status && status.napcatQr) || null;   // 网关在等扫码登录
+				return h(react.Fragment, null,
+					!napcatOk ? h("button", {
+						className: "fy-btn primary",
+						title: "QQ 网关（NapCat）不通：需 UAC 授权一次（点「是」），网关随 DSH 启停",
+						disabled: busy === "svc:napcat",
+						onClick: startNapcat,
+					}, busy === "svc:napcat" ? "授权中…" : (napcatQr ? "重新拉网关" : "安装并启动 QQ 网关")) : null,
+					h("button", { className: "fy-btn", disabled: busy === "svc:qq", onClick: () => restartService("qq", "restart") },
+						busy === "svc:qq" ? "重启中…" : "重启 QQ"));
+			}
+			if (id === "wechat") {
+				return h("button", { className: "fy-btn", disabled: busy === "svc:wechat", onClick: () => restartService("wechat", "restart") },
+					busy === "svc:wechat" ? "重启中…" : "重启微信");
+			}
+			return null;
+		}
 
-				h(Row, { label: "B站" }, chip("bilibili"), recheck("bilibili")),
-				h(Row, { label: "cookie" }, pwd("sessdata", "SESSDATA"), pwd("bili_jct", "bili_jct"), pwd("buvid3", "buvid3"),
-					h("button", { className: "fy-btn primary", disabled: busy === "cookie" || !(ck.sessdata.trim() && ck.bili_jct.trim()), onClick: saveCookie },
-						busy === "cookie" ? "保存中…" : "保存 cookie")),
+		// 通道卡体顶部：状态摘要行（+ 重新检测）与各通道的登录相关内容（cookie 表单 / 扫码等待 / QQ 二维码）
+		function ConnTop(props) {
+			const { id, cx, svc } = props;
+			const row = connRow(cx, id);
+			const recheck = id !== "wechat"
+				? h("button", { className: "fy-btn", disabled: !!cx.busy, onClick: () => cx.check(id) }, cx.busy === "check:" + id ? "检测中…" : "重新检测")
+				: null;
 
-				h(Row, { label: "抖音" }, chip("douyin"),
-					ls === "waiting"
-						? h("button", { className: "fy-btn", onClick: () => flowRef.current.cancel() }, "取消")
-						: h("button", { className: "fy-btn primary", onClick: () => flowRef.current.start() }, "扫码登录"),
-					recheck("douyin")),
-				ls === "waiting" ? h("div", { className: "fy-hint" }, "请在弹出的 Chrome 里扫码，剩余 " + (login.remainingSec != null ? login.remainingSec : "?") + " 秒") : null,
-				ls === "timeout" ? h("div", { className: "fy-notice err" }, "扫码超时，请重新点「扫码登录」") : null,
-				ls === "error" ? h("div", { className: "fy-notice err" }, "登录失败：" + ((login && login.error) || "未知错误")) : null,
+			if (id === "qq") {
+				const qq = (cx.raw && cx.raw.qq) || {};
+				const qr = cx.qr;
+				return h(react.Fragment, null,
+					h(Field, { label: "状态" },
+						h("span", { className: "fy-conn-sum" }, row.summary),
+						recheck,
+						h("button", { className: "fy-btn", onClick: cx.loadQr }, "刷新二维码"),
+						svc && svc.qq ? h("span", { className: "fy-tag" }, svc.qq.running ? "进程在跑" : "进程没跑") : null),
+					qq.qr && qq.qr.exists && qr && qr.dataUrl
+						? h(Field, { label: "扫码登录" },
+							h("img", { className: "fy-conn-qr", src: qr.dataUrl, alt: "QQ 登录二维码" }),
+							h("span", { className: "fy-conn-cap" }, qr.expired ? "二维码已过期，点「刷新二维码」" : "用手机 QQ 扫码登录（二维码 " + (qr.ageSec != null ? qr.ageSec : "?") + " 秒前生成）"))
+						: null);
+			}
 
-				h(Row, { label: "QQ" }, chip("qq"), recheck("qq"),
-					h("button", { className: "fy-btn", onClick: loadQr }, "刷新二维码")),
-				qq.qr && qq.qr.exists && qr && qr.dataUrl
-					? h("div", { className: "fy-row" },
-						h("img", { className: "fy-conn-qr", src: qr.dataUrl, alt: "QQ 登录二维码" }),
-						h("span", { className: "fy-hint" }, qr.expired ? "二维码已过期，点「刷新二维码」" : "用手机 QQ 扫码登录（二维码 " + (qr.ageSec != null ? qr.ageSec : "?") + " 秒前生成）"))
-					: null,
-
-				h(Row, { label: "微信" }, chip("wechat")),
-				h(Row, { label: "ESP32" }, chip("esp32")));
+			const status = h(Field, { label: "状态" }, h("span", { className: "fy-conn-sum" }, row.summary), recheck);
+			if (id === "bilibili") {
+				const ck = cx.ck;
+				const setField = (k) => (ev) => { const v = ev.target.value; cx.setCk((c) => Object.assign({}, c, { [k]: v })); };
+				const pwd = (k, ph) => h("input", { className: "fy-input fy-w-md", type: "password", autoComplete: "off", placeholder: ph, value: ck[k], onChange: setField(k) });
+				return h(react.Fragment, null, status,
+					h("div", { className: "fy-row fy-conn-ck", style: { display: cx.ckOpen ? "flex" : "none" } },
+						pwd("sessdata", "SESSDATA"), pwd("bili_jct", "bili_jct"), pwd("buvid3", "buvid3"),
+						h("button", { className: "fy-btn primary", disabled: cx.busy === "cookie" || !(ck.sessdata.trim() && ck.bili_jct.trim()), onClick: cx.saveCookie },
+							cx.busy === "cookie" ? "保存中…" : "保存 cookie")));
+			}
+			if (id === "douyin") {
+				const login = cx.login;
+				const ls = (login && login.state) || "idle";
+				return h(react.Fragment, null, status,
+					ls === "waiting" ? h("div", { className: "fy-notice" }, "请在弹出的 Chrome 里扫码，剩余 " + (login.remainingSec != null ? login.remainingSec : "?") + " 秒") : null,
+					ls === "timeout" ? h("div", { className: "fy-notice err" }, "扫码超时，请重新点「扫码登录」") : null,
+					ls === "error" ? h("div", { className: "fy-notice err" }, "登录失败：" + ((login && login.error) || "未知错误")) : null);
+			}
+			return status;
 		}
 
 		// ── ESP32 第五通道卡片（T24）──────────────────────────────────────────
@@ -797,7 +829,7 @@ textarea.fy-input{width:100%;min-height:136px;resize:vertical;line-height:1.65;f
 				const list = data.providers.filter((p) => p.kind === kind);
 				const meta = list.find((p) => p.id === s.id) || list[0];
 				return h("div", { key: kind, className: "fy-esp32-kind" },
-					h("div", { className: "fy-sub", style: { fontWeight: 600 } }, PROV_KIND_LABEL[kind]),
+					h("div", { className: "fy-esp32-sec" }, PROV_KIND_LABEL[kind]),
 					h(Field, { label: "服务商" },
 						h("select", {
 							className: "fy-input", value: s.id, "aria-label": kind + "-provider",
@@ -1006,7 +1038,7 @@ textarea.fy-input{width:100%;min-height:136px;resize:vertical;line-height:1.65;f
 				h(Esp32Providers, { onChanged: load }),
 
 				// 在线设备
-				h("div", { className: "fy-sub", style: { marginTop: 10 } }, "在线设备"),
+				h("div", { className: "fy-esp32-sec", style: { marginTop: 10 } }, "在线设备"),
 				h("div", { className: "fy-dev-list" },
 					devices.map((d, i) => {
 						const did = normDeviceId(d.deviceId);
@@ -1028,7 +1060,7 @@ textarea.fy-input{width:100%;min-height:136px;resize:vertical;line-height:1.65;f
 						h("div", { className: "fy-chip", key: k }, label + " ", h("b", null, latency[k] + "ms")))) : null,
 
 				// 对话气泡
-				h("div", { className: "fy-sub", style: { marginTop: 10 } }, "最近对话"),
+				h("div", { className: "fy-esp32-sec", style: { marginTop: 10 } }, "最近对话"),
 				rows.length ? h("div", { className: "fy-mem" },
 					rows.slice().reverse().map((r, i) => h("div", {
 						className: "fy-bubble " + (r.role === "assistant" ? "assistant" : r.role === "user" ? "user" : ""),
@@ -1042,93 +1074,46 @@ textarea.fy-input{width:100%;min-height:136px;resize:vertical;line-height:1.65;f
 		}
 
 		// ===== StatusBar =====
-		// part: "status"（运行状态）| "switches"（平台开关）。ESP32 卡夹在两者之间，所以拆成两个 part。
+		// 单行状态条（置顶）：5 个通道状态点（取自 deriveConnections，点击滚到对应通道卡）｜ 右端：干跑总闸 演练|真发 + 体检。
+		// 体检明细（fy-check）紧贴状态条下方。原「运行状态」卡的其余统计压成状态条的 title 提示。
+		const CHANNEL_ANCHORS = { bilibili: "fy-ch-bili", douyin: "fy-ch-douyin", qq: "fy-qq", wechat: "fy-wechat", esp32: "fy-esp32" };
+		const BAR_LABELS = { esp32: "小智ESP32" };
 		function StatusBar(props) {
-			const { cfg, status, svc, conn, selftest, busy, load, runSelftest, startNapcat, restartService, save, setStatus, togglePlatform } = props;
-
-			if (props.part === "switches") {
-				const platforms = (cfg && cfg.platforms) || {};
-				// 平台开关
-				return h(Card, { title: "平台开关", hint: "QQ/微信/抖音私信默认不随 DSH 自启（防止开机全家桶卡死）：开关点开才启动对应服务，DSH 退出自动复位；B站是生物钟，改完立即生效。" },
-					h("div", { className: "fy-grid" },
-						PLATFORMS.map((p) => h("div", { className: "fy-sw", key: p[0] },
-							h("span", null,
-								h("span", { className: "fy-sw-name" }, p[1]),
-								h("small", { className: "fy-sw-desc" }, p[2])),
-							h(Switch, {
-								on: platforms[p[0]] !== false,
-								label: p[1],
-								onChange: (v) => togglePlatform(p[0], v, p[3] === "restart"),
-							})))));
-			}
-
-			const schedulerOn = !!(status && status.scheduler && status.scheduler.ok);
-			// 通道是否真的通：进程活着不等于能收发
-			const napcatOk = !!(status && status.qqChannel && status.qqChannel.napcat && status.qqChannel.napcat.ok);
-			const beat = (status && status.wxBeat) || null;
-			const beatAge = beat && beat.ts ? Math.max(0, Math.round((Date.now() - Number(beat.ts)) / 1000)) : null;
-			const beatFresh = beatAge !== null && beatAge <= 120;
-			const napcatQr = (status && status.napcatQr) || null;   // 网关在等扫码登录
-			const connBy = {};
-			deriveConnections(conn || {}).forEach((x) => { connBy[x.id] = conn ? x : Object.assign({}, x, { state: "unknown", summary: "未检测" }); });
+			const { raw, status, selftest, busy, runSelftest, save, setStatus } = props;
+			const rows = deriveConnections(raw || {});
+			const dryRun = !!(status && status.dryRun);
 			const mood = (status && status.mood) || { value: 0, hunger: 0 };
+			const info = status
+				? "生物钟 " + (status.scheduler && status.scheduler.ok ? "运行中" : "停着")
+					+ " · 今日评论 " + (status.commentsToday || 0) + " 条"
+					+ " · 今日分享 " + (status.sharesToday || 0) + "/" + (status.sharesMax || 0)
+					+ " · 情绪 " + mood.value + " · 饿 " + mood.hunger
+					+ " · 唱歌音色 " + (status.rvcVoice || "未训（RVC）")
+				: undefined;
+			const jump = (id) => {
+				const el = document.getElementById(CHANNEL_ANCHORS[id]);
+				if (el && el.scrollIntoView) el.scrollIntoView({ behavior: "smooth", block: "start" });
+			};
 
-			// 运行状态
-			return h(Card, {
-				title: "运行状态",
-				extra: h("div", { className: "fy-row", style: { margin: 0 } },
-					h("button", { className: "fy-btn", onClick: load, disabled: !!busy }, "刷新"),
-					h("button", { className: "fy-btn", onClick: runSelftest, disabled: busy === "selftest" },
-						busy === "selftest" ? "体检中…" : "跑一次体检")),
-			},
-				h("div", { className: "fy-stats" },
-					h("div", { className: "fy-chip" },
-						h("span", { className: "fy-dot" + (schedulerOn ? "" : " off") }),
-						"生物钟 ", h("b", null, schedulerOn ? "运行中" : "停着")),
-					h("div", { className: "fy-chip" }, "今日评论 ", h("b", null, (status && status.commentsToday) || 0), " 条"),
-					h("div", { className: "fy-chip" }, "今日分享 ",
-						h("b", null, (status && status.sharesToday) || 0), "/", (status && status.sharesMax) || 0),
-					h("div", { className: "fy-chip" }, "情绪 ", h("b", null, mood.value), " · 饿 ", h("b", null, mood.hunger)),
-					h("div", { className: "fy-chip" }, "🎤 唱歌音色 ", h("b", null, (status && status.rvcVoice) || "未训（RVC）"),
-						h("span", { className: "fy-hint", style: { marginLeft: 6 } }, "说话音色在下面「音色」里，两套独立")),
-					h("div", { className: "fy-chip" + ((status && status.dryRun) ? "" : " bad") },
-						"干跑 ", h("b", null, (status && status.dryRun) ? "开（只演练）" : "关（真发）"))),
-				// 干跑总闸（10-25 补上 UI）：以前面板只能看不能改，改它必须手动编辑 feiyu.config.json
-				h(Row, { label: "干跑（总闸）" },
-					h(Switch, {
-						on: !!(status && status.dryRun),
-						label: "dryRun",
-						onChange: async (v) => {
-							const ok = await save({ guard: { dryRun: v } }, v ? "已切干跑：所有对外动作只演练不发送" : "已切真发：弹幕/动态/点赞/评论/群聊/说说/音频都会真的发出去");
-							if (ok) setStatus((prev) => Object.assign({}, prev || {}, { dryRun: v }));
-						},
-					}),
-					h("span", { className: "fy-hint", style: { marginTop: 0, flex: "1 1 240px" } },
-						"开 = 只打印不发送（她照常思考、算分、写日记）；关 = 真发。别和 douyin.dryRun 搞混，那个只管抖音。")),
-				// 通道健康：进程活着 ≠ 能收发。QQ 要看 NapCat 网关，微信要看心跳
-				h("div", { className: "fy-stats", style: { marginTop: 10 } },
-					h("div", { className: "fy-chip" + (connBy.qq.state === "ok" ? "" : " bad") },
-						h("span", { className: "fy-dot" + (connBy.qq.state === "ok" ? "" : " off") }),
-						"QQ ", h("b", null, connBy.qq.summary)),
-					h("div", { className: "fy-chip" + (svc && svc.qq && svc.qq.running ? "" : " bad") },
-						"QQ 进程 ", h("b", null, svc && svc.qq && svc.qq.running ? "在跑" : "没跑")),
-					h("div", { className: "fy-chip" + (connBy.wechat.state === "ok" ? "" : " bad") },
-						"微信 ", h("b", null, connBy.wechat.summary))),
-				h("div", { className: "fy-row", style: { marginTop: 8, marginBottom: 0 } },
-					!napcatOk ? h("span", { className: "fy-hint", style: { marginTop: 0, flex: "1 1 260px" } },
-						napcatQr
-							? "📷 网关在等扫码登录：二维码 " + Math.max(1, Math.round(napcatQr.ageSec / 60)) + " 分钟前刚刷新，请在上方「连接中心」扫码。已开快速登录，正常只需要扫这一次。"
-							: "⚠️ QQ 网关（NapCat）不通：服务在跑，但收不到也发不出任何 QQ 消息。点右边按钮，UAC 点一次「是」即可；网关随 DSH 启停。") : null,
-					!napcatOk ? h("button", {
-						className: "fy-btn primary",
-						disabled: busy === "svc:napcat",
-						onClick: startNapcat,
-					}, busy === "svc:napcat" ? "授权中…" : (napcatQr ? "重新拉网关" : "安装并启动 QQ 网关")) : null,
-					h("button", {
-						className: "fy-btn",
-						disabled: busy === "svc:all",
-						onClick: () => restartService("all", "restart"),
-					}, busy === "svc:all" ? "重启中…" : "重启 QQ / 微信")),
+			return h(react.Fragment, null,
+				h("div", { className: "fy-statusbar", title: info },
+					h("div", { className: "fy-sb-dots" },
+						rows.map((r) => h("button", {
+							type: "button", className: "fy-sb-dot", key: r.id, "data-conn": r.id, title: r.summary,
+							onClick: () => jump(r.id),
+						}, h(StatusDot, { state: r.state }), BAR_LABELS[r.id] || r.label))),
+					h("div", { className: "fy-sb-right", title: "演练 = 只打印不发送（她照常思考、算分、写日记）；真发 = 真的发出去。douyin.dryRun 只管抖音，与这个总闸无关。" },
+						// 干跑总闸：改它以前只能手动编辑 feiyu.config.json
+						h(Segmented, {
+							options: [{ value: true, label: "演练" }, { value: false, label: "真发", danger: true }],
+							value: dryRun,
+							onChange: async (v) => {
+								const ok = await save({ guard: { dryRun: v } }, v ? "已切干跑：所有对外动作只演练不发送" : "已切真发：弹幕/动态/点赞/评论/群聊/说说/音频都会真的发出去");
+								if (ok) setStatus((prev) => Object.assign({}, prev || {}, { dryRun: v }));
+							},
+						}),
+						h("button", { className: "fy-btn", onClick: runSelftest, disabled: busy === "selftest" },
+							busy === "selftest" ? "体检中…" : "体检"))),
 				selftest ? h("div", { className: "fy-check" },
 					(selftest.items || []).map((it, i) => h("div", { key: i },
 						h("span", { className: it.ok ? "ok" : "no" }, it.ok ? "✓ " : "✗ "),
@@ -1303,12 +1288,13 @@ textarea.fy-input{width:100%;min-height:136px;resize:vertical;line-height:1.65;f
 		}
 
 		// ===== QqCard =====
-		// 通道卡：卡头 = 名称 + 状态点 + 动作槽（state/action 由 Lead 在 T7 接线）；QQ 主动搭话并入本卡
+		// 通道卡：卡头 = 名称 + 状态点 + 启用开关槽(toggle) + 动作槽(action)；top = 卡体顶部槽（连接状态行等，由 FeiyuSection 传入）；QQ 主动搭话并入本卡
 		function QqCard(props) {
 			const { draft, setDraft, saveProactive } = props;
 			const maxUnlimited = Number(draft.qqProactiveMax) === 0;
 
-			return h(ChannelCard, { id: "fy-qq", title: "QQ", state: props.state || "off", action: props.action },
+			return h(ChannelCard, { id: "fy-qq", title: "QQ", state: props.state || "off", toggle: props.toggle, action: props.action },
+				props.top || null,
 				h(Field, { label: "主动搭话" },
 					h(Toggle, {
 						on: draft.qqProactive,
@@ -1341,7 +1327,8 @@ textarea.fy-input{width:100%;min-height:136px;resize:vertical;line-height:1.65;f
 		function WechatCard(props) {
 			const { draft, setDraft, save } = props;
 
-			return h(ChannelCard, { id: "fy-wechat", title: "微信", state: props.state || "off", action: props.action },
+			return h(ChannelCard, { id: "fy-wechat", title: "微信", state: props.state || "off", toggle: props.toggle, action: props.action },
+				props.top || null,
 				h(Field, { label: "节奏档位" },
 					h(Segmented, {
 						options: [
@@ -1527,7 +1514,8 @@ textarea.fy-input{width:100%;min-height:136px;resize:vertical;line-height:1.65;f
 			const set = (o) => setDraft(Object.assign({}, draft, o));
 
 			// 抖音
-			return h(ChannelCard, { id: "fy-ch-douyin", title: "抖音", state: props.state || "off", action: props.action },
+			return h(ChannelCard, { id: "fy-ch-douyin", title: "抖音", state: props.state || "off", toggle: props.toggle, action: props.action },
+				props.top || null,
 				h(Field, { label: "自主观看" },
 					h("button", { className: "fy-btn primary", disabled: busy === "watch", onClick: startWatch },
 						busy === "watch" ? "启动中…" : "开始看（10 分钟）")),
@@ -1633,7 +1621,8 @@ textarea.fy-input{width:100%;min-height:136px;resize:vertical;line-height:1.65;f
 			const dykOn = BILI_DYK.filter((d) => draft[d.on]).length;
 
 			// B站
-			return h(ChannelCard, { id: "fy-ch-bili", title: "B站", state: props.state || "off", action: props.action },
+			return h(ChannelCard, { id: "fy-ch-bili", title: "B站", state: props.state || "off", toggle: props.toggle, action: props.action },
+				props.top || null,
 				h(Field, { label: "分享（@ 你）" },
 					h(Toggle, {
 						on: draft.shareOn,
@@ -1696,8 +1685,7 @@ textarea.fy-input{width:100%;min-height:136px;resize:vertical;line-height:1.65;f
 			const [notice, setNotice] = useState(null);
 			const [report, setReport] = useState("");
 			const timer = useRef(0);
-			const [conn, setConn] = useState(null);
-			useEffect(() => { api(CONN_API.list).then(setConn).catch(() => {}); }, []);
+			const cx = useConnections();
 
 			const flash = useCallback((msg, isErr) => {
 				setNotice({ msg: msg, err: !!isErr });
@@ -1979,47 +1967,67 @@ textarea.fy-input{width:100%;min-height:136px;resize:vertical;line-height:1.65;f
 			}, [persona, flash]);
 
 			if (loading && !cfg) {
-				return h("div", { className: "fy-panel" }, h("div", { className: "fy-hint" }, "读取大肥鱼配置…"));
+				return h("div", { className: "fy-panel" }, h("div", { className: "fy-notice" }, "读取大肥鱼配置…"));
 			}
 
 			if (error && !cfg) {
 				return h("div", { className: "fy-panel" },
 					h("div", { className: "fy-notice err" }, "载入失败：" + error),
-					h("div", { className: "fy-hint" },
+					h("div", { className: "fy-notice" },
 						"确认插件已在 DSH 里加载（宿主半边 dsh-feiyu 活着），然后点这里重试。"),
 					h("div", { className: "fy-row" }, h("button", { className: "fy-btn primary", onClick: load }, "重试")));
 			}
 
 
+			const platforms = (cfg && cfg.platforms) || {};
+			// 平台启用开关：放进各通道卡头（键 / togglePlatform / 重启语义同旧「平台开关」卡）
+			const platToggle = (key) => {
+				const p = PLATFORMS.find((x) => x[0] === key);
+				return h(Toggle, { on: platforms[key] !== false, label: p[1], onChange: (v) => togglePlatform(key, v, p[2] === "restart") });
+			};
+			const chState = (id) => connRow(cx, id).state;
+			const chAction = (id) => h(ChannelAction, { id: id, cx: cx, busy: busy, status: status, startNapcat: startNapcat, restartService: restartService });
+			const chTop = (id) => h(ConnTop, { id: id, cx: cx, svc: svc });
+
 			return h("div", { className: "fy-panel" },
 
-				// 抬头
-				h("div", { className: "fy-hero" },
+				// 抬头（配置文件路径放 title，不占版面）
+				h("div", { className: "fy-hero", title: "配置文件：" + (cfgPath || "~/.dsh/feiyu.config.json") + "（面板改动即时写入，下次唤醒/重启生效）" },
 					h("div", { className: "fy-avatar" }, "🐟"),
-					h("div", null,
-						h("div", { className: "fy-h1" }, "大肥鱼 · 私享版"),
-						h("div", { className: "fy-sub" }, "她按作息自己醒：B站/抖音定时，QQ/微信随时回你"))),
+					h("div", { className: "fy-h1" }, "大肥鱼 · 私享版")),
 
-				notice ? h("div", { className: "fy-notice" + (notice.err ? " err" : "") }, notice.msg) : null,
-
-				// 连接中心
-				h(ConnectionCenter, null),
-
-				h(Group, { title: "基础", defaultOpen: true },
-
-				// 运行状态
+				// 状态条（置顶）：5 通道状态点 | 演练·真发 | 体检
 				h(StatusBar, {
-					part: "status", cfg: cfg, status: status, svc: svc, conn: conn, selftest: selftest, busy: busy,
-					load: load, runSelftest: runSelftest, startNapcat: startNapcat, restartService: restartService, save: save, setStatus: setStatus,
+					raw: cx.raw, status: status, selftest: selftest, busy: busy,
+					runSelftest: runSelftest, save: save, setStatus: setStatus,
 				}),
 
-				// ESP32 第五通道
+				notice ? h("div", { className: "fy-notice" + (notice.err ? " err" : "") }, notice.msg) : null,
+				cx.unavailable ? h("div", { className: "fy-notice err" }, "后端未提供，请重启 DSH") : null,
+				cx.err ? h("div", { className: "fy-notice err" }, "连接状态读取失败：" + cx.err) : null,
+				cx.msg ? h("div", { className: "fy-notice" + (cx.msg.err ? " err" : "") }, cx.msg.text) : null,
+
+				// 通道卡：B站、抖音、QQ、微信、小智ESP32
+				h(BiliCard, {
+					draft: draft, setDraft: setDraft, save: save, busy: busy, startBiliWatch: startBiliWatch, toggleFreeRoam: toggleFreeRoam,
+					state: chState("bilibili"), toggle: platToggle("bilibili"), action: chAction("bilibili"), top: chTop("bilibili"),
+				}),
+				h(DouyinCard, {
+					draft: draft, setDraft: setDraft, save: save, busy: busy, startWatch: startWatch,
+					restartService: restartService, toggleFreeRoam: toggleFreeRoam,
+					state: chState("douyin"), toggle: platToggle("douyin"), action: chAction("douyin"), top: chTop("douyin"),
+				}),
+				h(QqCard, {
+					draft: draft, setDraft: setDraft, saveProactive: saveProactive,
+					state: chState("qq"), toggle: platToggle("qq"), action: chAction("qq"), top: chTop("qq"),
+				}),
+				h(WechatCard, {
+					draft: draft, setDraft: setDraft, save: save,
+					state: chState("wechat"), toggle: platToggle("wechat"), action: chAction("wechat"), top: chTop("wechat"),
+				}),
 				h(Esp32Card),
 
-				// 平台开关
-				h(StatusBar, { part: "switches", cfg: cfg, togglePlatform: togglePlatform }),
-
-				// 主人 / 大脑 / 音色
+				// 通用区：主人 / 大脑 / 音色
 				h(GeneralCards, {
 					part: "base", cfg: cfg, draft: draft, setDraft: setDraft, voices: voices, busy: busy, setBusy: setBusy,
 					save: save, flash: flash, saveLlmKey: saveLlmKey, testVoice: testVoice,
@@ -2031,48 +2039,14 @@ textarea.fy-input{width:100%;min-height:136px;resize:vertical;line-height:1.65;f
 					busy: busy, mem: mem, setMem: setMem, flash: flash,
 				}),
 
-				),
-
-				h(Group, { title: "平台", defaultOpen: true },
-
-				// QQ 主动搭话
-				h(QqCard, { draft: draft, setDraft: setDraft, saveProactive: saveProactive }),
-
-				// 微信
-				h(WechatCard, { draft: draft, setDraft: setDraft, save: save }),
-
-				// 作息（B站和抖音共用的生物钟窗口）
-				h(FreedomZone, {
-					part: "schedule", draft: draft, setDraft: setDraft, busy: busy, commitNight: commitNight,
-					genReport: genReport, genReview: genReview, report: report,
-				}),
-
-				// 抖音
-				h(DouyinCard, {
-					draft: draft, setDraft: setDraft, save: save, busy: busy, startWatch: startWatch,
-					restartService: restartService, toggleFreeRoam: toggleFreeRoam,
-				}),
-
-				// B站
-				h(BiliCard, {
-					draft: draft, setDraft: setDraft, save: save, busy: busy, startBiliWatch: startBiliWatch, toggleFreeRoam: toggleFreeRoam,
-				}),
-
-				),
-
-				h(Group, { title: "高级", defaultOpen: false },
-
-				// 完全自由 + 上网与进化
+				// 自由度区：完全自由与进化（DangerZone，默认折叠）+ 作息
 				h(FreedomZone, {
 					part: "freedom", draft: draft, setDraft: setDraft, save: save, setSvc: setSvc, flash: flash,
 				}),
-
-				),
-
-				// 页脚
-				h("div", { className: "fy-hint", style: { paddingLeft: 2 } },
-					"配置文件：", cfgPath || "~/.dsh/feiyu.config.json",
-					"（面板改动即时写入，下次唤醒/重启生效）"));
+				h(FreedomZone, {
+					part: "schedule", draft: draft, setDraft: setDraft, busy: busy, commitNight: commitNight,
+					genReport: genReport, genReview: genReview, report: report,
+				}));
 		}
 
 		// ── 客户端插件入口 ────────────────────────────────────────────────────

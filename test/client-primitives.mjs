@@ -221,6 +221,14 @@ const texts = (node, acc = []) => {
   assert.equal(byClass(head, 'act').length, 1, '主动作在卡头')
   assert.equal(byClass(t, 'body').length, 1)
   assert.equal(byClass(t, 'fy-hint').length, 0, '无 hint 槽')
+  assert.equal(byClass(t, 'fy-card-act').length, 0, '没有 toggle 时 action 不包裹')
+  // T7：启用开关槽 —— 卡头右侧 = toggle + action（同一个 fy-card-act 容器，toggle 在前）
+  const toggle = createElement('button', { className: 'tg', role: 'switch' })
+  const t2 = render(() => createElement(P.ChannelCard, { id: 'ch-bili', title: 'B站', state: 'ok', toggle, action }, createElement('div', { className: 'body' }, 'x')))
+  const act = byClass(byClass(t2, 'fy-card-head')[0], 'fy-card-act')[0]
+  assert.ok(act, 'toggle 存在时卡头右侧有 fy-card-act 容器')
+  assert.deepEqual(act.children.map((c) => c.props.className), ['tg', 'act'], 'toggle 在 action 之前')
+  assert.equal(byClass(byClass(t2, 'fy-card-head')[0], 'fy-card-title')[0].children.some((c) => c && c.props && c.props.className === 'tg'), false, 'toggle 不在标题块里')
 }
 
 // ── DangerZone ────────────────────────────────────────────────────────────

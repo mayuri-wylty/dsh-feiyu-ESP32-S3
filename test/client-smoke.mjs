@@ -164,6 +164,23 @@ assert.ok(esp32Text.includes('http://192.168.1.20:8765/xiaozhi/ota/'), 'OTA URL 
 // token 明文绝不出现（状态接口只给 tokenSet 布尔值）
 assert.ok(!esp32Text.includes('"tok"') && !esp32Text.includes('>tok<'), 'ESP32 卡片不应包含 token 明文')
 
+// —— T7 布局：状态条（5 点 + 演练|真发 + 体检）+ 5 张通道卡（带 id / StatusDot），无旧分组 / 灰字说明 ——
+const cls = (n, c) => String((n.props && n.props.className) || '').split(/\s+/).includes(c)
+const channels = collect(tree, (n) => cls(n, 'fy-channel'))
+assert.deepEqual(channels.map((n) => n.props.id), ['fy-ch-bili', 'fy-ch-douyin', 'fy-qq', 'fy-wechat', 'fy-esp32'], '通道卡顺序：B站、抖音、QQ、微信、小智ESP32')
+for (const c of channels) assert.ok(collect(c, (n) => /^fy-dot-(ok|warn|off|idle)$/.test(String(n.props.className || ''))).length >= 1, c.props.id + ' 应有 StatusDot')
+const bar = collect(tree, (n) => cls(n, 'fy-statusbar'))[0]
+assert.ok(bar, '应有状态条')
+assert.equal(collect(bar, (n) => cls(n, 'fy-sb-dot')).length, 5, '状态条 5 个通道点')
+assert.deepEqual(collect(bar, (n) => cls(n, 'fy-seg-opt')).map((n) => (n.children || []).join('')), ['演练', '真发'])
+assert.ok(collect(bar, (n) => n.type === 'button' && (n.children || []).join('') === '体检').length === 1, '状态条有「体检」')
+// 四个平台启用开关在卡头（ESP32 没有）
+const headSw = (c) => collect(collect(c, (n) => cls(n, 'fy-card-head'))[0], (n) => cls(n, 'fy-switch')).map((n) => n.props['aria-label'])
+assert.deepEqual(channels.slice(0, 4).map(headSw), [['B站'], ['抖音'], ['QQ'], ['微信']], '平台启用开关在各自卡头')
+assert.deepEqual(headSw(channels[4]), [])
+assert.equal(collect(tree, (n) => cls(n, 'fy-group') && !cls(n, 'sub')).length, 0, '不应有顶层折叠分组')
+assert.ok(!/fy-hint|fy-sw-desc|fy-sub/.test(JSON.stringify(tree)), '整页无灰字说明类')
+
 // —— 包清单契约：dsh-client-modules 只认 exports["./client"] + dsh.client ——
 const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'))
 assert.ok(pkg.dsh && pkg.dsh.client, 'package.json 必须声明 dsh.client，否则宿主不会去装浏览器半边')
