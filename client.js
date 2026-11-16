@@ -176,6 +176,32 @@ textarea.fy-input{width:100%;min-height:136px;resize:vertical;line-height:1.65;f
 .fy-bubble b{font-weight:600;margin-right:6px;color:var(--dsw-alias-label-secondary,#8b95a5)}
 .fy-bubble.user{background:color-mix(in srgb,#3b6cf6 12%,transparent)}
 .fy-bubble.assistant{background:color-mix(in srgb,#3fbf6f 12%,transparent)}
+/* ── T2 新原语（Field / Toggle / NumberField / Segmented / StatusDot / ChannelCard / DangerZone / useSave）── */
+.fy-danger{--fy-danger:#c9564d;color:var(--fy-danger)}
+.fy-switch.fy-danger.on{background:var(--fy-danger);border-color:var(--fy-danger)}
+.fy-dot-ok,.fy-dot-warn,.fy-dot-off{display:inline-block;width:6px;height:6px;border-radius:50%;margin-right:6px;vertical-align:1px}
+.fy-dot-ok{background:#3fbf6f}
+.fy-dot-warn{background:#d9a13a}
+.fy-dot-off{background:#c9564d}
+.fy-suffix{font-size:12px;color:var(--dsw-alias-label-secondary,#8b95a5);white-space:nowrap}
+.fy-field{flex-wrap:nowrap}
+.fy-unl{display:inline-flex;align-items:center;gap:6px;margin-left:6px}
+.fy-unl-label{font-size:12px;color:var(--dsw-alias-label-secondary,#8b95a5);white-space:nowrap}
+.fy-flash{animation:fy-flash 0.9s ease-out}
+@keyframes fy-flash{0%{border-color:#3fbf6f;box-shadow:0 0 0 3px color-mix(in srgb,#3fbf6f 35%,transparent)}100%{box-shadow:0 0 0 0 transparent}}
+.fy-seg{display:inline-flex;border:1px solid var(--dsw-alias-border-l2,color-mix(in srgb,currentColor 18%,transparent));border-radius:8px;overflow:hidden}
+.fy-seg-opt{background:transparent;border:0;border-left:1px solid var(--dsw-alias-border-l2,color-mix(in srgb,currentColor 18%,transparent));
+  color:var(--dsw-alias-label-secondary,#6b7480);padding:5px 14px;font:inherit;font-size:12.5px;cursor:pointer}
+.fy-seg-opt:first-child{border-left:0}
+.fy-seg-opt.on{background:var(--dsw-alias-brand-primary,#3b6cf6);color:#fff}
+.fy-seg-opt.danger.on{background:#c9564d;color:#fff}
+.fy-channel .fy-card-head{align-items:center;min-height:28px}
+.fy-channel .fy-card-title{display:flex;align-items:center}
+.fy-channel .fy-card-title .fy-dot-ok,.fy-channel .fy-card-title .fy-dot-warn,.fy-channel .fy-card-title .fy-dot-off{margin:0 0 0 8px}
+.fy-zone{display:flex;flex-direction:column;gap:6px;border-left:3px solid #c9564d;padding-left:12px}
+.fy-zone-head{display:flex;align-items:center;gap:10px;align-self:flex-start;background:transparent;border:0;padding:2px 0;font:inherit;font-size:13px;font-weight:600;color:inherit;cursor:pointer}
+.fy-zone-summary{font-size:11.5px;font-weight:400;color:var(--dsw-alias-label-tertiary,#98a2b3)}
+.fy-zone-body{flex-direction:column;gap:0}
 `;
 
 		function useStyles() {
@@ -226,6 +252,203 @@ textarea.fy-input{width:100%;min-height:136px;resize:vertical;line-height:1.65;f
 				h("button", { type: "button", className: "fy-group-head", "aria-expanded": open ? "true" : "false", onClick: () => setOpen(!open) },
 					(open ? "▾ " : "▸ ") + props.title),
 				h("div", { className: "fy-group-body", style: { display: open ? "flex" : "none" } }, props.children));
+		}
+
+		// ── UI 原语（T2 新增；暂未接入任何卡片，旧 CSS 类/旧组件不动）────────────────
+
+		// ===== normNum =====
+		// 数字输入归一化：空串 → 默认值；其余 Math.max(0, Number(raw) || 0)（非数字→0，负数→0）。
+		// null/undefined 视作空。纯函数，经 exports.__test 暴露。
+		function normNum(raw, dflt) {
+			const d = dflt === undefined ? 0 : dflt;
+			if (raw === null || raw === undefined) return d;
+			return String(raw).trim() === "" ? d : Math.max(0, Number(raw) || 0);
+		}
+
+		// ===== Field =====
+		// 一行 = 标签 + 控件 + 可选单位后缀（后缀在控件右侧同一行）
+		function Field(props) {
+			return h("div", { className: "fy-row fy-field" },
+				props.label ? h("span", { className: "fy-label" }, props.label) : null,
+				props.children,
+				props.suffix ? h("span", { className: "fy-suffix" }, props.suffix) : null);
+		}
+
+		// ===== Toggle =====
+		// 复用 .fy-switch；danger 时开启态为红色（.fy-danger）
+		function Toggle(props) {
+			return h("button", {
+				type: "button",
+				className: "fy-switch" + (props.on ? " on" : "") + (props.danger ? " fy-danger" : ""),
+				role: "switch",
+				"aria-checked": props.on ? "true" : "false",
+				"aria-label": props.label || "",
+				disabled: props.disabled,
+				onClick: () => props.onChange(!props.on),
+			}, h("i"));
+		}
+
+		// ===== NumberField =====
+		// 数值框（输入时本地缓冲，失焦才 onCommit(归一化后的数)）+ 可选同行"不限"小开关（开启时数值框 disabled）
+		// 额外可选 props：dflt（空值时的默认，缺省 0）、placeholder
+		function NumberField(props) {
+			const [text, setText] = useState(null);
+			const shown = text === null ? (props.value === null || props.value === undefined ? "" : props.value) : text;
+			const commit = () => {
+				if (text === null) return;
+				let n = normNum(text, props.dflt);
+				if (props.min !== undefined && n < props.min) n = props.min;
+				if (props.max !== undefined && n > props.max) n = props.max;
+				setText(null);
+				if (props.onCommit) props.onCommit(n);
+			};
+			return h(Field, { label: props.label, suffix: props.suffix },
+				h("input", {
+					className: "fy-input fy-w-sm", type: "number", min: props.min, max: props.max,
+					value: shown, placeholder: props.placeholder,
+					disabled: !!props.unlimited,
+					onChange: (e) => setText(e.target.value),
+					onBlur: commit,
+				}),
+				props.onUnlimited
+					? h("span", { className: "fy-unl" },
+						h(Toggle, { on: !!props.unlimited, label: "不限", onChange: props.onUnlimited }),
+						h("span", { className: "fy-unl-label" }, "不限"))
+					: null);
+		}
+
+		// ===== Segmented =====
+		// options: [{value,label,danger?}]；danger 选项选中时红底
+		function Segmented(props) {
+			return h("div", { className: "fy-seg", role: "radiogroup" },
+				(props.options || []).map((o) => h("button", {
+					key: String(o.value),
+					type: "button",
+					role: "radio",
+					"aria-checked": props.value === o.value ? "true" : "false",
+					className: "fy-seg-opt" + (props.value === o.value ? " on" : "") + (o.danger ? " danger" : ""),
+					onClick: () => props.onChange(o.value),
+				}, o.label)));
+		}
+
+		// ===== StatusDot =====
+		// state: 'ok' | 'warn' | 'off'（其余按 off）
+		function StatusDot(props) {
+			const s = props.state === "ok" || props.state === "warn" ? props.state : "off";
+			return h("span", { className: "fy-dot-" + s });
+		}
+
+		// ===== ChannelCard =====
+		// 卡头 = 名称 + StatusDot + 主动作槽(action)；root 带 id 供状态条锚点滚动；无 hint/footer 槽
+		function ChannelCard(props) {
+			return h("section", { className: "fy-card fy-channel", id: props.id },
+				h("div", { className: "fy-card-head" },
+					h("div", { className: "fy-card-title" }, props.title,
+						props.state ? h(StatusDot, { state: props.state }) : null),
+					props.action || null),
+				props.children);
+		}
+
+		// ===== DangerZone =====
+		// 折叠头显示 summary（调用方传字符串，如"已开 2 项"）；内容始终挂在树里，仅 display 切换
+		function DangerZone(props) {
+			const [open, setOpen] = useState(!!props.defaultOpen);
+			return h("div", { className: "fy-zone" },
+				h("button", { type: "button", className: "fy-zone-head", "aria-expanded": open ? "true" : "false", onClick: () => setOpen(!open) },
+					h("span", null, (open ? "▾ " : "▸ ") + props.title),
+					props.summary ? h("span", { className: "fy-zone-summary" }, props.summary) : null),
+				h("div", { className: "fy-zone-body", style: { display: open ? "flex" : "none" } }, props.children));
+		}
+
+		// ===== useSave =====
+		// useSave({save}) → { commitProps(path, label, opts?) }
+		//   path 如 "douyin.freeRoam.maxVideos"；返回 { onBlur, className }，onBlur 失焦时 save(嵌套补丁, label)，
+		//   成功后给该输入框短暂加 fy-flash（不弹"已保存"文字）。
+		//   opts.className = 基础类（会与 fy-flash 合并，返回对象可直接 spread）；opts.parse = 值转换（默认原样字符串）。
+		function useSave(opts) {
+			const save = opts && opts.save;
+			const [flashPath, setFlashPath] = useState("");
+			const timer = useRef(0);
+			useEffect(() => () => clearTimeout(timer.current), []);
+			const commitProps = (path, label, o) => {
+				const parse = (o && o.parse) || ((v) => v);
+				const base = (o && o.className) || "";
+				const cls = (base ? base + " " : "") + (flashPath === path ? "fy-flash" : "");
+				return {
+					className: cls.trim(),
+					onBlur: async (e) => {
+						let patch = parse(e && e.target ? e.target.value : undefined);
+						const keys = String(path).split(".");
+						for (let i = keys.length - 1; i >= 0; i--) patch = { [keys[i]]: patch };
+						const ok = await save(patch, label);
+						if (ok === false) return;
+						setFlashPath(path);
+						clearTimeout(timer.current);
+						timer.current = setTimeout(() => setFlashPath(""), 900);
+					},
+				};
+			};
+			return { commitProps: commitProps };
+		}
+
+		// ===== FreeBrowse =====
+		// 抖音 / B站 共用的"自由刷"四行（自由刷、不限量、最大条数、最长时长），由旧 DouyinCard / BiliCard 里两份重复代码参数化而来。
+		// 只渲染 4 个 Row（Fragment），外层标题/折叠由调用方决定。toggleFreeRoam(platform, on) 是旧代码里启停服务的回调（可选）。
+		const FREE_BROWSE = {
+			douyin: {
+				cfgKey: "douyin", svc: "douyin", pre: "douyin",
+				onHint: "开着就一直刷，看到有意思的抖音私信发你",
+				onMsg: "已开启抖音自由刷", offMsg: "已关闭抖音自由刷",
+				videosMsg: "抖音自由刷条数已保存", minutesMsg: "抖音自由刷时长已保存",
+			},
+			bili: {
+				cfgKey: "bilibili", svc: "bilibili", pre: "bili",
+				onHint: "开着就一直刷，评论区 @ 你",
+				onMsg: "已开启 B站自由刷", offMsg: "已关闭 B站自由刷",
+				videosMsg: "B站自由刷条数已保存", minutesMsg: "B站自由刷时长已保存",
+			},
+		};
+		function FreeBrowse(props) {
+			const { draft, setDraft, save, toggleFreeRoam } = props;
+			const c = FREE_BROWSE[props.platform];
+			const kRoam = c.pre + "FreeRoam", kUnl = c.pre + "Unlimited", kVid = c.pre + "MaxVideos", kMin = c.pre + "MaxMinutes";
+			const patch = (k, v) => ({ [c.cfgKey]: { freeRoam: { [k]: v } } });
+			return h(react.Fragment, null,
+				h(Row, { label: "自由刷" },
+					h(Switch, {
+						on: draft[kRoam],
+						label: kRoam,
+						onChange: (v) => {
+							setDraft(Object.assign({}, draft, { [kRoam]: v }));
+							save(patch("enabled", v), v ? c.onMsg : c.offMsg);
+							if (toggleFreeRoam) toggleFreeRoam(c.svc, v);
+						},
+					}),
+					h("span", { className: "fy-hint", style: { marginTop: 0 } }, c.onHint)),
+				h(Row, { label: "不限量" },
+					h(Switch, {
+						on: draft[kUnl],
+						label: kUnl,
+						onChange: (v) => {
+							setDraft(Object.assign({}, draft, { [kUnl]: v }));
+							save(patch("unlimited", v), v ? "自由：不限条数/时长" : "按下面限度刷");
+						},
+					}),
+					h("span", { className: "fy-hint", style: { marginTop: 0 } }, "自由选项（默认开）")),
+				h(Row, { label: "最大条数" },
+					h("input", {
+						className: "fy-input fy-w-sm", type: "number", min: 0, value: draft[kVid], placeholder: "0",
+						onChange: (e) => setDraft(Object.assign({}, draft, { [kVid]: e.target.value })),
+						onBlur: () => save(patch("maxVideos", Number(draft[kVid]) || 0), c.videosMsg),
+					}),
+					h("span", { className: "fy-hint", style: { marginTop: 0 } }, "0 = 不限（关掉「不限量」才按这个数）")),
+				h(Row, { label: "最长时长" },
+					h("input", {
+						className: "fy-input fy-w-sm", type: "number", min: 0, value: draft[kMin], placeholder: "0",
+						onChange: (e) => setDraft(Object.assign({}, draft, { [kMin]: e.target.value })),
+						onBlur: () => save(patch("maxMinutes", Number(draft[kMin]) || 0), c.minutesMsg),
+					}),
+					h("span", { className: "fy-hint", style: { marginTop: 0 } }, "分钟，0 = 不限")));
 		}
 
 		// ── 连接中心（契约：docs/2026-11-12-connection-center-contract.md）─────────
@@ -1928,7 +2151,11 @@ textarea.fy-input{width:100%;min-height:136px;resize:vertical;line-height:1.65;f
 		exports.name = name;
 		exports.inject = inject;
 		exports.apply = apply;
-		exports.__test = { CONN_API: CONN_API, deriveConnections: deriveConnections, createLoginFlow: createLoginFlow };
+		exports.__test = {
+			CONN_API: CONN_API, deriveConnections: deriveConnections, createLoginFlow: createLoginFlow,
+			normNum: normNum, Field: Field, NumberField: NumberField, Toggle: Toggle, Segmented: Segmented, StatusDot: StatusDot,
+			ChannelCard: ChannelCard, DangerZone: DangerZone, FreeBrowse: FreeBrowse, useSave: useSave,
+		};
 		return module.exports;
 	},
 });

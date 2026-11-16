@@ -14,6 +14,7 @@ const HERE = path.dirname(fileURLToPath(import.meta.url))
 const TESTS = [
   'client-smoke.mjs',
   'client-render.mjs',
+  'client-primitives.mjs',
   'stickers-test.mjs',
   'memory-test.mjs',
   'memory-recall-test.mjs',
