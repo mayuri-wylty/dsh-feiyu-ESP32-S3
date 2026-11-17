@@ -4,10 +4,12 @@
 
 ## 1. 目标板卡
 
+**已验证配置：ESP32-S3 + ST7735 128×160 LCD**（bread-compact-wifi-lcd 板卡，固件 `c435f99`，已实机构建、烧录并跑通完整对话）。其他屏型或板卡未验证。
+
 | 项 | 值 |
 | --- | --- |
 | 固件板卡标识 | `bread-compact-wifi-lcd`（menuconfig 中显示为 `Bread Compact Wi-Fi + LCD (面包板)`） |
-| 固件源码 | https://github.com/78/xiaozhi-esp32 ，commit `c435f99`（`v2.5.2-121-gc435f99`） |
+| 固件源码 | 已随仓库收录在 `firmware/xiaozhi-esp32/`（上游 https://github.com/78/xiaozhi-esp32 ，commit `c435f99`，原样快照，见 `firmware/README.md`） |
 | 板卡目录 | 固件源码内 `main/boards/bread-compact-wifi-lcd/` |
 | 主控 | ESP32-S3，16 MB Flash（qio），8 MB Octal PSRAM（80 MHz） |
 | 音频 | 无独立 Codec，I2S 单工（Simplex）：麦克风与功放各用一组引脚直连 |
@@ -76,7 +78,7 @@
 
 ## 5. 构建与烧录
 
-固件克隆和 ESP-IDF 都放在纯 ASCII 路径下，并在原生 PowerShell 中操作（Git Bash/MSYS 无法激活 ESP-IDF）。
+先把 `firmware/xiaozhi-esp32/` 复制到纯 ASCII 路径（如 `C:\esp32\xiaozhi-esp32`），ESP-IDF 也放在纯 ASCII 路径，并在原生 PowerShell 中操作（Git Bash/MSYS 无法激活 ESP-IDF）。
 
 ```powershell
 # 构建：ESP-IDF 路径、固件克隆路径、你电脑的局域网 IP 都按自己的填

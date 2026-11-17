@@ -14,7 +14,7 @@
 | dsh-feiyu 插件 | 0.4.0，分支 `feat/esp32-channel` | 本仓库 | 是 |
 | GPT-SoVITS | commit `59c4468`；venv Python 3.10.11 + torch 2.7.1+cu128（CUDA 可用） | https://github.com/RVC-Boss/GPT-SoVITS | 否（21 GB） |
 | ESP-IDF | v6.0.1（`8c19b156`），工具目录 `D:\Espressif` | https://github.com/espressif/esp-idf | 否 |
-| 小智固件 | v2.5.2 之后 121 个提交，commit `c435f99`（`v2.5.2-121-gc435f99`） | https://github.com/78/xiaozhi-esp32 | 否 |
+| 小智固件 | v2.5.2 之后 121 个提交，commit `c435f99`（`v2.5.2-121-gc435f99`） | https://github.com/78/xiaozhi-esp32 | 是（`firmware/xiaozhi-esp32/` 原样快照） |
 | 开发板 | bread-compact-wifi-lcd，ST7735 128x160 屏 | 物料与接线见 `docs/HARDWARE.md` | 是 |
 | 抖音/微信脚本 Python | 3.12.x，依赖见 `scripts/requirements/*.txt` | — | 是（锁定文件） |
 
@@ -35,8 +35,7 @@
 6. **固件（仅需要烧录时）**：
    ```powershell
    git clone https://github.com/espressif/esp-idf.git; cd esp-idf; git checkout v6.0.1; .\install.ps1
-   git clone https://github.com/78/xiaozhi-esp32.git C:\esp32\xiaozhi-esp32
-   cd C:\esp32\xiaozhi-esp32; git checkout c435f99
+   Copy-Item -Recurse firmware\xiaozhi-esp32 C:\esp32\xiaozhi-esp32   # 仓库已收录固件源码，复制到纯 ASCII 路径再构建
    ```
    然后在原生 PowerShell 中构建与烧录（路径必须纯 ASCII，详见 `docs/HARDWARE.md` 第 5 节）：
    ```powershell
