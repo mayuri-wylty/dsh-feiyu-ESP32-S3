@@ -12,7 +12,7 @@
     幂等：若 Web 宿主已在运行，直接报告 PID / 端口并返回 0。
 
 .PARAMETER InstallDir
-    DSH 桌面版安装目录，默认 D:\DSH桌面版。
+    DSH 桌面版安装目录（必填，或设环境变量 FEIYU_DSH_DIR）。
 
 .PARAMETER TimeoutSec
     等待 Web 宿主监听端口的秒数，默认 90。
@@ -24,11 +24,11 @@
     pwsh -File .\start-dsh.ps1
 
 .EXAMPLE
-    pwsh -File .\start-dsh.ps1 -InstallDir 'D:\DSH桌面版' -TimeoutSec 120
+    pwsh -File .\start-dsh.ps1 -InstallDir 'C:\path\to\DSH' -TimeoutSec 120
 #>
 [CmdletBinding()]
 param(
-    [string]$InstallDir = 'D:\DSH桌面版',
+    [string]$InstallDir = $env:FEIYU_DSH_DIR,
     [int]$TimeoutSec = 90,
     [switch]$NoWait
 )
@@ -40,10 +40,14 @@ function Write-Ok([string]$Message) { Write-Host "[DSH] $Message" -ForegroundCol
 function Write-Warn([string]$Message) { Write-Host "[DSH] $Message" -ForegroundColor Yellow }
 function Write-Fail([string]$Message) { Write-Host "[DSH] $Message" -ForegroundColor Red }
 
+if (-not $InstallDir) {
+    Write-Fail "未指定 DSH 桌面版安装目录：请传 -InstallDir，或设置环境变量 FEIYU_DSH_DIR。"
+    exit 1
+}
 $exe = Join-Path $InstallDir 'DeepSeek Harness.exe'
 if (-not (Test-Path -LiteralPath $exe)) {
     Write-Fail "未找到 DSH 桌面版：$exe"
-    Write-Fail "请确认安装目录，或通过 -InstallDir 指定（例如 -InstallDir 'D:\DSH桌面版'）。"
+    Write-Fail "请确认安装目录，或通过 -InstallDir / FEIYU_DSH_DIR 指定。"
     exit 1
 }
 

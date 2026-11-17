@@ -1,21 +1,25 @@
 #!/usr/bin/env python3
 """Build the bread-compact-wifi-lcd firmware with the feiyu ESP32 channel settings.
 
-Runs upstream ``scripts/build.py`` from a pure-ASCII clone of the firmware tree
-(``D:\\esp32\\xiaozhi-esp32``) because CMake on this host crashes with
-0xC0000409 when any path argument contains non-ASCII characters.
+Runs upstream ``scripts/build.py`` from a clone of the firmware tree
+(https://github.com/78/xiaozhi-esp32, commit c435f99). Keep that clone on a
+pure-ASCII path: CMake crashes with 0xC0000409 on some hosts when any path
+argument contains non-ASCII characters.
 
 All local customisation stays in this wrapper so the firmware clone remains
 pristine (``git status`` clean):
 
 * Panel type -> the physical panel on this board is an ST7735 128x160, not the
   board preset's default ST7789 240x320 (wrong type = garbled screen).
-* OTA URL -> this PC's LAN address, served by the DSH host gateway.
+* OTA URL -> your PC's LAN address, served by the DSH host gateway.
 * Custom wake word -> ESP-SR MultiNet ("da fei yu" / 大肥鱼), which upstream
   ``--wake-word`` cannot express (it only knows WakeNet model names).
 
-Usage (after activating ESP-IDF; optional ``--dry-run`` skips the build):
-    python build-firmware.py [--dry-run]
+Usage (after activating ESP-IDF; ``--dry-run`` skips the build):
+    python build-firmware.py --firmware <clone dir> --ota-url http://<PC LAN IP>:8765/xiaozhi/ota/ [--dry-run]
+
+``--firmware`` and ``--ota-url`` may also come from the environment variables
+FEIYU_FIRMWARE_DIR and FEIYU_OTA_URL.
 """
 
 from __future__ import annotations
@@ -25,13 +29,9 @@ import os
 import sys
 from pathlib import Path
 
-FIRMWARE = Path(r"D:\esp32\xiaozhi-esp32")
 BOARD = "bread-compact-wifi-lcd"
 VARIANT = "bread-compact-wifi-lcd"
 LANGUAGE = "zh-CN"
-
-# Served by the DSH desktop host gateway on this PC (0.0.0.0:8765).
-OTA_URL = "http://192.168.10.39:8765/xiaozhi/ota/"
 
 WAKE_WORD_PINYIN = "da fei yu"
 WAKE_WORD_DISPLAY = "大肥鱼"
@@ -63,12 +63,23 @@ def main(argv: list[str] | None = None) -> int:
         help="resolve and print sdkconfig only; do not invoke idf.py",
     )
     parser.add_argument(
+        "--firmware",
+        default=os.environ.get("FEIYU_FIRMWARE_DIR"),
+        help="path of the xiaozhi-esp32 clone (env FEIYU_FIRMWARE_DIR)",
+    )
+    parser.add_argument(
         "--ota-url",
-        default=OTA_URL,
-        help="override the OTA URL baked into the firmware",
+        default=os.environ.get("FEIYU_OTA_URL"),
+        help="OTA URL baked into the firmware, served by the DSH gateway: "
+        "http://<PC LAN IP>:8765/xiaozhi/ota/ (env FEIYU_OTA_URL)",
     )
     args = parser.parse_args(argv)
 
+    if not args.ota_url:
+        parser.error("--ota-url is required (or set FEIYU_OTA_URL)")
+    if not args.firmware:
+        parser.error("--firmware is required (or set FEIYU_FIRMWARE_DIR)")
+    FIRMWARE = Path(args.firmware).resolve()
     if not FIRMWARE.is_dir():
         print(f"[ERROR] firmware tree not found: {FIRMWARE}", file=sys.stderr)
         return 2

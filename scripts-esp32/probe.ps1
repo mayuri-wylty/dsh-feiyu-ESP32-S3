@@ -14,7 +14,7 @@
     退出码：0=全部 PASS；1=存在 FAIL；2=无 FAIL 但有 BLOCKED（需人工处理）。
 
 .PARAMETER DshInstallDir
-    DSH 桌面版安装目录，默认 D:\DSH桌面版。
+    DSH 桌面版安装目录，默认读环境变量 FEIYU_DSH_DIR；不影响除「DSH 在线」失败提示之外的检查。
 
 .PARAMETER ProfileDir
     DSH desktop profile 目录，默认 %USERPROFILE%\.dsh\profiles\desktop。
@@ -23,7 +23,7 @@
     DSH 数据目录，默认 %USERPROFILE%\.dsh。
 
 .PARAMETER SovitsRoot
-    GPT-SoVITS 根目录，默认 D:\AI_Code\小智机器人\GPT-SoVITS（用于自动找参考音）。
+    GPT-SoVITS 根目录，默认读环境变量 FEIYU_SOVITS_ROOT（用于自动找参考音）。
 
 .PARAMETER SovitsUrl
     GPT-SoVITS api_v2 地址，默认 http://127.0.0.1:9880。
@@ -45,14 +45,14 @@
     pwsh -File .\probe.ps1
 
 .EXAMPLE
-    pwsh -File .\probe.ps1 -RefAudio 'D:\AI_Code\小智机器人\GPT-SoVITS\models\yinlang\yinlang.wav' -PromptText '参考音的原话'
+    pwsh -File .\probe.ps1 -RefAudio 'C:\GPT-SoVITS\models\voice\voice.wav' -PromptText '参考音的原话'
 #>
 [CmdletBinding()]
 param(
-    [string]$DshInstallDir = 'D:\DSH桌面版',
+    [string]$DshInstallDir = $env:FEIYU_DSH_DIR,
     [string]$ProfileDir = (Join-Path $env:USERPROFILE '.dsh\profiles\desktop'),
     [string]$DshHome = (Join-Path $env:USERPROFILE '.dsh'),
-    [string]$SovitsRoot = 'D:\AI_Code\小智机器人\GPT-SoVITS',
+    [string]$SovitsRoot = $env:FEIYU_SOVITS_ROOT,
     [string]$SovitsUrl = 'http://127.0.0.1:9880',
     [string]$RefAudio = '',
     [string]$PromptText = '',
@@ -126,11 +126,11 @@ $dshPort = $null
 $dshOnline = $false
 
 if ($null -eq $dshHostProcess) {
-    if (Test-Path -LiteralPath (Join-Path $DshInstallDir 'DeepSeek Harness.exe')) {
+    if ($DshInstallDir -and (Test-Path -LiteralPath (Join-Path $DshInstallDir 'DeepSeek Harness.exe'))) {
         Add-Check 'DSH 在线' 'FAIL' '未发现 Web 宿主进程；请先运行 start-dsh.ps1'
     }
     else {
-        Add-Check 'DSH 在线' 'FAIL' "未找到安装目录 $DshInstallDir，且未发现 Web 宿主进程"
+        Add-Check 'DSH 在线' 'FAIL' "未找到安装目录（-DshInstallDir / FEIYU_DSH_DIR：'$DshInstallDir'），且未发现 Web 宿主进程"
     }
 }
 else {
@@ -300,8 +300,8 @@ else {
     }
 
     if ([string]::IsNullOrWhiteSpace($resolvedRefAudio)) {
-        $modelsDir = Join-Path $SovitsRoot 'models'
-        if (Test-Path -LiteralPath $modelsDir) {
+        $modelsDir = if ($SovitsRoot) { Join-Path $SovitsRoot 'models' } else { '' }
+        if ($modelsDir -and (Test-Path -LiteralPath $modelsDir)) {
             $candidate = Get-ChildItem -LiteralPath $modelsDir -Directory -ErrorAction SilentlyContinue | ForEach-Object {
                 $wav = Get-ChildItem -LiteralPath $_.FullName -Filter '*.wav' -File -ErrorAction SilentlyContinue |
                     Sort-Object Length -Descending | Select-Object -First 1

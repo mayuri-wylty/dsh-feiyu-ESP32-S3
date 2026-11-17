@@ -66,19 +66,19 @@ pwsh -File D:\AI_Code\小智机器人\dsh-feiyu\scripts-esp32\probe.ps1
 
 ### 4.5 构建与烧录固件
 
-前提：已安装并激活 ESP-IDF；固件源码位于纯英文路径下（当前为 `D:\esp32\xiaozhi-esp32`）。
+前提：已安装 ESP-IDF v6.0.1；固件源码（xiaozhi-esp32，commit `c435f99`）位于纯英文路径下。接线与物料见 `docs/HARDWARE.md`。
 
 ```powershell
-python D:\AI_Code\小智机器人\dsh-feiyu\scripts-esp32\build-firmware.py
-pwsh -File D:\AI_Code\小智机器人\dsh-feiyu\scripts-esp32\flash-firmware.ps1 -Port COM3 -Baud 230400
+pwsh -File scripts-esp32\build-firmware.ps1 -IdfPath <ESP-IDF 目录> -Firmware <固件克隆目录> -OtaUrl http://<本机局域网 IP>:8765/xiaozhi/ota/
+pwsh -File scripts-esp32\flash-firmware.ps1 -Port COM3 -Firmware <固件克隆目录>
 ```
 
 注意事项：
 
 - 本机面板为 ST7735 128×160。板卡预设按 240×320 配置，直接按预设构建会导致花屏。构建脚本会自动改为正确型号，请勿手动执行通用构建命令后烧录。
-- 构建脚本同时写入本机局域网地址与自定义唤醒词「大肥鱼」，无需另行修改源码或配置界面。
+- 构建脚本同时写入 `-OtaUrl` 指定的本机局域网地址与自定义唤醒词「大肥鱼」，无需另行修改源码或配置界面。
 - 烧录按分区逐个写入，保留设备中已保存的无线网络配置。请勿烧录整片合并镜像，否则会清除配网信息。
-- 烧录波特率建议使用 230400；使用 460800 可能中途断开。
+- 烧录波特率默认 230400；使用 460800 可能中途断开。
 - 更换电脑或本机局域网地址发生变化后，需重新构建并烧录固件。
 
 ### 4.6 设备联网与接入
@@ -213,7 +213,7 @@ New-NetFirewallRule -DisplayName "feiyu-esp32" -Direction Inbound -Protocol TCP 
 pwsh -File D:\AI_Code\小智机器人\dsh-feiyu\scripts-esp32\start-dsh.ps1
 pwsh -File D:\AI_Code\小智机器人\dsh-feiyu\scripts-esp32\start-sovits.ps1
 pwsh -File D:\AI_Code\小智机器人\dsh-feiyu\scripts-esp32\probe.ps1
-python D:\AI_Code\小智机器人\dsh-feiyu\scripts-esp32\build-firmware.py
+pwsh -File D:\AI_Code\小智机器人\dsh-feiyu\scripts-esp32\build-firmware.ps1 -IdfPath <ESP-IDF 目录> -Firmware D:\esp32\xiaozhi-esp32 -OtaUrl http://<本机局域网 IP>:8765/xiaozhi/ota/
 ```
 
 ### 10.2 文件与目录

@@ -1,0 +1,85 @@
+{
+  "identity": {
+    "name": "大肥鱼",
+    "ownerTitle": "主人",
+    "selfClaim": "我"
+  },
+  "owner": {
+    "name": "",
+    "mid": "",
+    "qq": "",
+    "wechat": ""
+  },
+  "llm": {
+    "api_key": "",
+    "base_url": "https://api.deepseek.com/v1",
+    "model": "deepseek-chat"
+  },
+  "voice": {
+    "ref_audio_path": ""
+  },
+  "guard": {
+    "dryRun": true
+  },
+  "esp32": {
+    "enabled": true,
+    "port": 8765,
+    "publicHost": "",
+    "token": "",
+    "allowDevices": [],
+    "idleDisconnectMs": 300000,
+    "pipeline": "qa",
+    "vad": {
+      "silenceMs": 700,
+      "minSpeechMs": 250,
+      "maxSpeechMs": 30000
+    },
+    "asr": {
+      "primary": "sensevoice",
+      "fallback": "",
+      "openai": {
+        "baseUrl": "",
+        "apiKey": "",
+        "model": "",
+        "language": "",
+        "timeoutMs": 30000,
+        "preset": ""
+      },
+      "volcengine": {
+        "apiKey": "",
+        "resourceId": "volc.bigasr.auc_turbo",
+        "modelName": "bigmodel",
+        "endpoint": "https://openspeech.bytedance.com",
+        "timeoutMs": 30000
+      }
+    },
+    "tts": {
+      "provider": "sovits-stream",
+      "fallback": "",
+      "cloud": {
+        "baseUrl": "",
+        "apiKey": "",
+        "model": "",
+        "voice": "",
+        "speed": 1,
+        "timeoutMs": 30000,
+        "preset": ""
+      },
+      "volcengine": {
+        "apiKey": "",
+        "resourceId": "seed-tts-2.0",
+        "speaker": "",
+        "speechRate": 0,
+        "loudnessRate": 0,
+        "endpoint": "https://openspeech.bytedance.com",
+        "connectTimeoutMs": 10000,
+        "idleTimeoutMs": 15000
+      }
+    },
+    "personaHint": "",
+    "greetings": [
+      "我在呢",
+      "嗯？怎么啦"
+    ]
+  }
+}

@@ -15,7 +15,7 @@
 | GPT-SoVITS | commit `59c4468`；venv Python 3.10.11 + torch 2.7.1+cu128（CUDA 可用） | https://github.com/RVC-Boss/GPT-SoVITS | 否（21 GB） |
 | ESP-IDF | v6.0.1（`8c19b156`），工具目录 `D:\Espressif` | https://github.com/espressif/esp-idf | 否 |
 | 小智固件 | v2.5.2 之后 121 个提交，commit `c435f99`（`v2.5.2-121-gc435f99`） | https://github.com/78/xiaozhi-esp32 | 否 |
-| 开发板 | bread-compact-wifi-lcd，ST7735 128x160 屏 | AGENTS.md 有接线 | — |
+| 开发板 | bread-compact-wifi-lcd，ST7735 128x160 屏 | 物料与接线见 `docs/HARDWARE.md` | 是 |
 | 抖音/微信脚本 Python | 3.12.x，依赖见 `scripts/requirements/*.txt` | — | 是（锁定文件） |
 
 > `DEPLOY.md` 里写的 GPT-SoVITS `b4570b8` 是更早的记录，当前实际运行的是 `59c4468`。
@@ -35,16 +35,21 @@
 6. **固件（仅需要烧录时）**：
    ```powershell
    git clone https://github.com/espressif/esp-idf.git; cd esp-idf; git checkout v6.0.1; .\install.ps1
-   git clone https://github.com/78/xiaozhi-esp32.git D:\esp32\xiaozhi-esp32
-   cd D:\esp32\xiaozhi-esp32; git checkout c435f99
+   git clone https://github.com/78/xiaozhi-esp32.git C:\esp32\xiaozhi-esp32
+   cd C:\esp32\xiaozhi-esp32; git checkout c435f99
    ```
-   然后在原生 PowerShell 中 `. <esp-idf>\export.ps1`，运行 `python scripts-esp32/build-firmware.py`。路径必须纯 ASCII；烧录用 `flash-firmware.ps1`（230400 波特率，按分区写，保留 `0x9000` NVS）。
+   然后在原生 PowerShell 中构建与烧录（路径必须纯 ASCII，详见 `docs/HARDWARE.md` 第 5 节）：
+   ```powershell
+   pwsh -File scripts-esp32\build-firmware.ps1 -IdfPath C:\esp\esp-idf -Firmware C:\esp32\xiaozhi-esp32 -OtaUrl http://<你电脑的局域网 IP>:8765/xiaozhi/ota/
+   pwsh -File scripts-esp32\flash-firmware.ps1 -Port COM3 -Firmware C:\esp32\xiaozhi-esp32
+   ```
+   固件克隆本身不改动，屏型、OTA 地址、唤醒词都由构建脚本注入。烧录用 230400 波特率，按分区写，保留 `0x9000` NVS。
 
 ## 3. 复现者必须自己改的地方
 
-- `scripts-esp32/build-firmware.py` 里的 `OTA_URL` 写的是作者局域网 IP，换成你自己 PC 的 IP。
-- 文档与脚本默认路径是 `D:\AI_Code\小智机器人\…`、`D:\DSH桌面版`、`D:\esp32\xiaozhi-esp32`，路径不同要同步修改（`start-sovits.ps1` 有 `-Root` 参数）。
-- 配置在 `~/.dsh/feiyu.config.json`，数据在 `~/.feiyu-ai/`，均不入库。API Key、Wi-Fi 信息、ESP32 token 自行填写。
+- 构建脚本的 `-OtaUrl` 必填，填你自己 PC 的局域网 IP；换网络后需重新构建并烧录。
+- `scripts-esp32/` 下的脚本不再内置任何本机路径，路径都通过参数或环境变量传入：`FEIYU_IDF_PATH`、`FEIYU_FIRMWARE_DIR`、`FEIYU_OTA_URL`、`FEIYU_FLASH_PORT`、`FEIYU_DSH_DIR`、`FEIYU_SOVITS_ROOT`。
+- 配置在 `~/.dsh/feiyu.config.json`，可从仓库根的 `feiyu.config.example.json` 复制起步；数据在 `~/.feiyu-ai/`，均不入库。API Key、Wi-Fi 信息、ESP32 token 自行填写（token 留空会在首次启动时自动生成）。
 - ESP32 网关默认端口 8765，Bearer token 必填。
 
 ## 4. 已知缺口
